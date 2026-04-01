@@ -7,15 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum EmailOtpPurpose {
+  SIGNUP_VERIFY
+  SIGNIN
+}
+
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  passwordHash  String
-  fullName      String
-  phoneNumber   String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  refreshTokens RefreshToken[]
+  id                   String                @id @default(cuid())
+  email                String                @unique
+  passwordHash         String
+  fullName             String
+  phoneNumber          String
+  emailVerified        Boolean               @default(false)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  refreshTokens        RefreshToken[]
+  emailOtpChallenges   EmailOtpChallenge[]
+  passwordResetTokens  PasswordResetToken[]
 }
 
 model RefreshToken {
@@ -25,6 +33,32 @@ model RefreshToken {
   tokenHash String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model EmailOtpChallenge {
+  id           String            @id @default(cuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose      EmailOtpPurpose
+  codeHash     String
+  expiresAt    DateTime
+  attemptCount Int               @default(0)
+  consumedAt   DateTime?
+  createdAt    DateTime          @default(now())
+
+  @@index([userId, purpose])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId])
 }

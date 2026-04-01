@@ -1,6 +1,6 @@
 import type { User } from "@prisma/client";
 import { prisma } from "../lib/prisma";
-import type { PublicUser } from "../types/user";
+import type { PublicUser } from "../lib/types/user";
 
 function toPublicUser(user: User): PublicUser {
   return {
@@ -8,6 +8,7 @@ function toPublicUser(user: User): PublicUser {
     email: user.email,
     fullName: user.fullName,
     phoneNumber: user.phoneNumber,
+    emailVerified: user.emailVerified,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -37,4 +38,18 @@ export async function createUser(data: {
     },
   });
   return toPublicUser(user);
+}
+
+export async function setEmailVerified(userId: string, verified: boolean): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { emailVerified: verified },
+  });
+}
+
+export async function updatePasswordHash(userId: string, passwordHash: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+  });
 }

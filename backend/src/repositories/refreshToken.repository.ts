@@ -31,3 +31,7 @@ export async function findRefreshTokenByHash(tokenHash: string): Promise<Refresh
 export async function deleteRefreshTokenById(id: string): Promise<void> {
   await prisma.refreshToken.delete({ where: { id } });
 }
+
+export async function deleteRefreshTokensForUser(userId: string): Promise<void> {
+  await prisma.refreshToken.deleteMany({ where: { userId } });
+}

@@ -19,9 +19,45 @@ export async function postSignin(req: Request, res: Response, next: NextFunction
   }
 }
 
+export async function postVerifyOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await authService.verifyOtp(req.body);
+    res.status(200).json(result);
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function postResendOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await authService.resendOtp(req.body);
+    res.status(200).json(result);
+  } catch (e) {
+    next(e);
+  }
+}
+
 export async function postRefresh(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await authService.refresh(req.body);
+    res.status(200).json(result);
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function postForgotPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await authService.forgotPassword(req.body);
+    res.status(200).json(result);
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function postResetPassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await authService.resetPassword(req.body);
     res.status(200).json(result);
   } catch (e) {
     next(e);

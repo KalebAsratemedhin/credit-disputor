@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
-import { AppError } from "../utils/errors";
-import { formatValidationMessage } from "../utils/validationMessage";
+import { AppError } from "../lib/utils/errors";
+import { formatValidationMessage } from "../lib/utils/validationMessage";
 import { env } from "../config/env";
 import { logger } from "../lib/logger";
 

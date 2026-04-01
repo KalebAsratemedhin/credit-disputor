@@ -1,0 +1,124 @@
+import {
+  OTP_CODE_EMAIL_HTML_TEMPLATE,
+  type OtpCodeEmailParams,
+  otpCodeEmailSubject,
+  otpCodeEmailTextLines,
+} from "../../lib/emails/otpCode";
+import {
+  PASSWORD_RESET_EMAIL_HTML_TEMPLATE,
+  type PasswordResetEmailParams,
+  passwordResetEmailSubject,
+  passwordResetEmailTextLines,
+} from "../../lib/emails/passwordReset";
+import { env } from "../../config/env";
+import { getEmailSender } from "./getEmailSender";
+import type { RenderedEmail } from "./types";
+
+export type { OtpCodeEmailParams } from "../../lib/emails/otpCode";
+export type { PasswordResetEmailParams } from "../../lib/emails/passwordReset";
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function escapeHtmlAttr(s: string): string {
+  return escapeHtml(s).replace(/'/g, "&#39;");
+}
+
+function applyTemplate(template: string, vars: Record<string, string>): string {
+  let out = template;
+  for (const [key, value] of Object.entries(vars)) {
+    out = out.split(`{{${key}}}`).join(value);
+  }
+  return out;
+}
+
+const BRAND_NAME = "Credit Disputor";
+const PRIMARY_COLOR = "#0093FF";
+
+function transactionalLogoUrl(): string {
+  const base = env.publicApiUrl;
+  return `${base}/public/logo.jpg`;
+}
+
+function appendPlainTextFooter(text: string): string {
+  const year = new Date().getFullYear();
+  return `${text}\n\n---\n© ${year} ${BRAND_NAME}`;
+}
+
+function layoutTransactionalEmailHtml(mainHtml: string): string {
+  const logoSrc = escapeHtmlAttr(transactionalLogoUrl());
+  const year = new Date().getFullYear();
+  const inner = `<div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 16px; line-height: 1.6; color: #1f2937;">${mainHtml}</div>`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f4f4f5;padding:24px 16px;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+        <tr>
+          <td style="background-color:${PRIMARY_COLOR};padding:28px 32px;text-align:center;">
+            <img src="${logoSrc}" alt="${escapeHtmlAttr(BRAND_NAME)}" width="160" style="display:block;margin:0 auto;max-width:160px;height:auto;border:0;outline:none;text-decoration:none;">
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 32px 28px;">${inner}</td>
+        </tr>
+        <tr>
+          <td style="padding:20px 32px 28px;background-color:#f9fafb;border-top:1px solid #e5e7eb;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;line-height:1.5;color:#6b7280;text-align:center;">
+            © ${year} ${escapeHtml(BRAND_NAME)}. All rights reserved.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+function renderOtpCodeEmail(p: OtpCodeEmailParams): RenderedEmail {
+  const subject = otpCodeEmailSubject(p);
+  const text = appendPlainTextFooter(otpCodeEmailTextLines(p).join("\n"));
+  const inner = applyTemplate(OTP_CODE_EMAIL_HTML_TEMPLATE, {
+    firstName: escapeHtml(p.firstName),
+    code: escapeHtml(p.code),
+    expiresInMinutes: String(p.expiresInMinutes),
+    primaryColor: PRIMARY_COLOR,
+  });
+  return { subject, text, html: layoutTransactionalEmailHtml(inner) };
+}
+
+function renderPasswordResetEmail(p: PasswordResetEmailParams): RenderedEmail {
+  const subject = passwordResetEmailSubject();
+  const text = appendPlainTextFooter(passwordResetEmailTextLines(p).join("\n"));
+  const inner = applyTemplate(PASSWORD_RESET_EMAIL_HTML_TEMPLATE, {
+    firstName: escapeHtml(p.firstName),
+    resetUrl: escapeHtmlAttr(p.resetUrl),
+    expiresInMinutes: String(p.expiresInMinutes),
+    primaryColor: PRIMARY_COLOR,
+  });
+  return { subject, text, html: layoutTransactionalEmailHtml(inner) };
+}
+
+export async function sendOtpCodeEmail(
+  params: { to: string } & OtpCodeEmailParams
+): Promise<void> {
+  const { to, ...rest } = params;
+  const rendered = renderOtpCodeEmail(rest);
+  await getEmailSender().sendTransactional({ to, ...rendered });
+}
+
+export async function sendPasswordResetEmail(
+  params: { to: string } & PasswordResetEmailParams
+): Promise<void> {
+  const { to, ...rest } = params;
+  const rendered = renderPasswordResetEmail(rest);
+  await getEmailSender().sendTransactional({ to, ...rendered });
+}

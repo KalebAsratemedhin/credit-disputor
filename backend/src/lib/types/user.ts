@@ -3,6 +3,7 @@ export type PublicUser = {
   email: string;
   fullName: string;
   phoneNumber: string;
+  emailVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
 };

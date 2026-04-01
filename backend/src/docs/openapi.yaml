@@ -62,11 +62,11 @@ paths:
               $ref: "#/components/schemas/SignupRequest"
       responses:
         "201":
-          description: Created
+          description: Created — verify email with OTP; tokens are returned from POST /auth/verify-otp
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/SignupPendingResponse"
         "400":
           description: Validation error
           content:
@@ -92,7 +92,7 @@ paths:
               $ref: "#/components/schemas/SigninRequest"
       responses:
         "200":
-          description: OK
+          description: OK — session tokens issued (requires email to be verified)
           content:
             application/json:
               schema:
@@ -105,6 +105,142 @@ paths:
                 $ref: "#/components/schemas/ValidationErrorBody"
         "401":
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "403":
+          description: Email not verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/verify-otp:
+    post:
+      summary: Verify email OTP after signup (one-time email verification)
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyOtpRequest"
+      responses:
+        "200":
+          description: OK — session tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation or invalid OTP
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorBody"
+                  - $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Unknown user (generic)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/resend-otp:
+    post:
+      summary: Resend signup verification OTP
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResendOtpRequest"
+      responses:
+        "200":
+          description: Always OK (no enumeration)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkAckResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/forgot-password:
+    post:
+      summary: Request password reset email
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+      responses:
+        "200":
+          description: Generic acknowledgment (always same message)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForgotPasswordResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/reset-password:
+    post:
+      summary: Complete password reset with token from email link
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "200":
+          description: Password updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetPasswordSuccessResponse"
+        "400":
+          description: Validation or invalid/expired token
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorBody"
+                  - $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many attempts
           content:
             application/json:
               schema:
@@ -190,13 +326,15 @@ components:
           type: string
         phoneNumber:
           type: string
+        emailVerified:
+          type: boolean
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-      required: [id, email, fullName, phoneNumber, createdAt, updatedAt]
+      required: [id, email, fullName, phoneNumber, emailVerified, createdAt, updatedAt]
 
     SignupRequest:
       type: object
@@ -239,6 +377,83 @@ components:
         accessToken:
           type: string
         refreshToken:
+          type: string
+
+    SignupPendingResponse:
+      type: object
+      required: [user, verificationRequired]
+      properties:
+        user:
+          $ref: "#/components/schemas/PublicUser"
+        verificationRequired:
+          type: boolean
+          enum: [true]
+
+    VerifyOtpRequest:
+      type: object
+      required: [email, code, purpose]
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          pattern: "^\\d{4}$"
+        purpose:
+          type: string
+          enum: [signup_verify]
+
+    ResendOtpRequest:
+      type: object
+      required: [email, purpose]
+      properties:
+        email:
+          type: string
+          format: email
+        purpose:
+          type: string
+          enum: [signup_verify]
+
+    OkAckResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    ForgotPasswordResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, password, confirmPassword]
+      properties:
+        token:
+          type: string
+        password:
+          type: string
+          minLength: 8
+        confirmPassword:
+          type: string
+
+    ResetPasswordSuccessResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
           type: string
 
     ErrorBody:

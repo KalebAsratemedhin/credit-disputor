@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../config/env";
-import { InvalidTokenError, UnauthorizedError } from "../errors/business";
+import { InvalidTokenError, UnauthorizedError } from "../lib/errors";
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;

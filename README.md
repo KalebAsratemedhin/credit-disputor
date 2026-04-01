@@ -31,9 +31,13 @@ From the `backend` directory:
 
    Environment validation uses **envalid**. Important variables (see `backend/.env.example`):
 
-   - `JWT_ACCESS_EXPIRES_IN` — access JWT lifetime (e.g. `15m`, `1h`).
-   - `REFRESH_TOKEN_EXPIRES_IN` — refresh token storage TTL (e.g. `7d`; **ms**-compatible string).
-   - `LOG_LEVEL`, `LOG_PRETTY` — **Pino** logging (`LOG_PRETTY=true` for readable local logs).
+   - `JWT_SECRET`, `JWT_ACCESS_EXPIRES_IN`, `REFRESH_TOKEN_EXPIRES_IN`.
+   - `OTP_CODE_SECRET` — HMAC secret for email OTP codes (required).
+   - `OTP_TTL_MS`, `PASSWORD_RESET_TTL_MS` — e.g. `10m`, `1h`.
+   - `EMAIL_PROVIDER` — `console` (log only) or `resend`; set `RESEND_API_KEY` and `EMAIL_FROM` when using Resend.
+   - `FRONTEND_URL` — base URL for password reset links (`/reset-password?token=...`).
+   - `PUBLIC_API_URL` — optional; public origin of this API for the logo in HTML emails (`/public/logo.jpg`). Defaults to `http://localhost:PORT` when unset; set to your deployed API URL (HTTPS) in production so images load in mail clients.
+   - `LOG_LEVEL`, `LOG_PRETTY` — **Pino** logging.
 
 3. Apply database migrations:
 
@@ -53,16 +57,31 @@ The server listens on `http://localhost:3000` (or the `PORT` you set).
 
 - **Swagger UI:** [http://localhost:3000/api-docs](http://localhost:3000/api-docs)
 
-### Auth endpoints
+### Email verification (one-time after signup)
+
+After **signup**, the API returns `{ user, verificationRequired: true }` and sends a **4-digit code** by email (or logs it when `EMAIL_PROVIDER=console`). Exchange the code for tokens with **`POST /auth/verify-otp`** (`email`, `code`, `purpose`: `signup_verify`). Once verified, the user has `emailVerified: true` and future sign-ins return tokens immediately. Use **`POST /auth/resend-otp`** to resend the signup verification code.
+
+Email **templates** live under `backend/src/lib/emails/`; escaping, branded HTML layout (header with logo, footer), and sending are handled in `backend/src/services/email/` (**Resend** or **console** via `email.service.ts`). Static assets for mail (e.g. [`backend/public/logo.jpg`](backend/public/logo.jpg)) are served at **`GET /public/...`** when the API is running.
+
+### Password reset
+
+- **`POST /auth/forgot-password`** — `{ "email" }`. Always returns the same generic message (no account enumeration). If the user exists, an email is sent with a link: `{FRONTEND_URL}/reset-password?token=...`.
+- **`POST /auth/reset-password`** — `{ "token", "password", "confirmPassword" }`. Valid token updates the password and revokes existing refresh tokens.
+
+### Auth endpoints (summary)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/auth/signup` | Register with `email`, `password`, `fullName`, `phoneNumber` |
-| `POST` | `/auth/signin` | Sign in with `email`, `password` |
-| `POST` | `/auth/refresh` | Body `{ "refreshToken" }` — returns new `accessToken` and `refreshToken` (rotation) |
-| `GET` | `/auth/me` | Current user; send header `Authorization: Bearer <accessToken>` |
+| `POST` | `/auth/signup` | Register; returns pending verification + sends OTP |
+| `POST` | `/auth/signin` | Password check; OTP flow or immediate tokens if 2FA off |
+| `POST` | `/auth/verify-otp` | `{ email, code, purpose }` → `accessToken`, `refreshToken`, `user` |
+| `POST` | `/auth/resend-otp` | Resend code (`password` required if `purpose` is `signin`) |
+| `POST` | `/auth/forgot-password` | Request reset email |
+| `POST` | `/auth/reset-password` | Set new password with token from email |
+| `POST` | `/auth/refresh` | Rotate refresh token |
+| `GET` | `/auth/me` | Current user (Bearer access token) |
 
-Successful signup, signin, and refresh responses include `accessToken`, `refreshToken`, and `user` (no password fields). Store the refresh token securely; it is shown only once per issuance.
+After OTP verification or a non-2FA signin, responses include `accessToken`, `refreshToken`, and `user`. Store refresh tokens securely; they are one-time rotatable.
 
 ### Health
 
