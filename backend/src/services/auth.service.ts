@@ -2,12 +2,16 @@ import crypto from "crypto";
 import bcrypt from "bcrypt";
 import jwt, { type SignOptions } from "jsonwebtoken";
 import ms, { type StringValue } from "ms";
+import { OAuth2Client } from "google-auth-library";
 import { EmailOtpPurpose } from "@prisma/client";
 import { env } from "../config/env";
 import {
   EmailTakenError,
   EmailNotVerifiedError,
+  GoogleAccountConflictError,
+  GoogleSignInNotConfiguredError,
   InvalidCredentialsError,
+  InvalidGoogleIdTokenError,
   InvalidRefreshTokenError,
   NotFoundError,
   ResetTokenInvalidError,
@@ -23,6 +27,7 @@ import {
   refreshBodySchema,
   resendOtpBodySchema,
   resetPasswordBodySchema,
+  googleSignInBodySchema,
   signinBodySchema,
   signupBodySchema,
   verifyOtpBodySchema,
@@ -31,6 +36,8 @@ import {
 import type { PublicUser } from "../lib/types/user";
 import { sendPasswordResetEmail } from "./email/email.service";
 import * as otpService from "./otp.service";
+
+const googleOAuthClient = new OAuth2Client();
 
 function isPrismaUniqueViolation(e: unknown): boolean {
   return (
@@ -114,6 +121,41 @@ async function issueTokenPair(user: PublicUser): Promise<AuthResponse> {
   return { user, accessToken, refreshToken };
 }
 
+async function verifyGoogleIdToken(idToken: string): Promise<{
+  sub: string;
+  email: string;
+  name: string;
+}> {
+  if (env.googleClientIds.length === 0) {
+    throw new GoogleSignInNotConfiguredError();
+  }
+  try {
+    const ticket = await googleOAuthClient.verifyIdToken({
+      idToken,
+      audience: env.googleClientIds,
+    });
+    
+    const payload = ticket.getPayload();
+
+    if (!payload?.sub || !payload.email || !payload.email_verified) {
+      throw new InvalidGoogleIdTokenError();
+    }
+
+    const email = payload.email.toLowerCase();
+    const name =
+      typeof payload.name === "string" && payload.name.trim().length > 0
+        ? payload.name.trim()
+        : (email.split("@")[0] ?? email);
+
+    return { sub: payload.sub, email, name };
+  } catch (e) {
+    if (e instanceof AppError) {
+      throw e;
+    }
+    throw new InvalidGoogleIdTokenError();
+  }
+}
+
 export async function signup(rawBody: unknown): Promise<SignupPendingResponse> {
   const parsed = signupBodySchema.safeParse(rawBody);
   if (!parsed.success) {
@@ -162,6 +204,10 @@ export async function signin(rawBody: unknown): Promise<SigninResult> {
     throw new InvalidCredentialsError();
   }
 
+  if (userRecord.passwordHash === null) {
+    throw new InvalidCredentialsError();
+  }
+
   const ok = await bcrypt.compare(password, userRecord.passwordHash);
   if (!ok) {
     throw new InvalidCredentialsError();
@@ -176,6 +222,76 @@ export async function signin(rawBody: unknown): Promise<SigninResult> {
     throw new InvalidCredentialsError();
   }
   return await issueTokenPair(user);
+}
+
+export async function signInWithGoogle(rawBody: unknown): Promise<AuthResponse> {
+  const parsed = googleSignInBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new ValidationAppError(parsed.error);
+  }
+
+  const { sub, email, name } = await verifyGoogleIdToken(parsed.data.idToken);
+
+  const bySub = await userRepository.findUserByGoogleSub(sub);
+  if (bySub) {
+    const user = await userRepository.findUserById(bySub.id);
+
+    if (!user) {
+      throw new InvalidCredentialsError();
+    }
+
+    return await issueTokenPair(user);
+  }
+
+  const byEmail = await userRepository.findUserByEmail(email);
+  if (byEmail) {
+    if (byEmail.googleSub !== null && byEmail.googleSub !== sub) {
+      throw new GoogleAccountConflictError();
+    }
+
+    const user = byEmail.googleSub
+      ? await userRepository.findUserById(byEmail.id)
+      : await userRepository.linkGoogleAccount(byEmail.id, sub);
+
+    if (!user) {
+      throw new InvalidCredentialsError();
+    }
+
+    return await issueTokenPair(user);
+  }
+
+  try {
+    const user = await userRepository.createOAuthUser({
+      email,
+      fullName: name,
+      googleSub: sub,
+    });
+
+    return await issueTokenPair(user);
+  } catch (e) {
+    if (!isPrismaUniqueViolation(e)) {
+      throw e;
+    }
+
+    const raced = await userRepository.findUserByEmail(email);
+    if (!raced) {
+      throw new GoogleAccountConflictError();
+    }
+
+    if (raced.googleSub !== null && raced.googleSub !== sub) {
+      throw new GoogleAccountConflictError();
+    }
+    
+    const user = raced.googleSub
+      ? await userRepository.findUserById(raced.id)
+      : await userRepository.linkGoogleAccount(raced.id, sub);
+
+    if (!user) {
+      throw new InvalidCredentialsError();
+    }
+
+    return await issueTokenPair(user);
+  }
 }
 
 export async function verifyOtp(rawBody: unknown): Promise<AuthResponse> {

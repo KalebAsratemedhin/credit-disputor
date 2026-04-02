@@ -40,10 +40,18 @@ const raw = cleanEnv(process.env, {
   OTP_CODE_SECRET: str({ desc: "Server secret for HMAC of email OTP codes" }),
   OTP_TTL_MS: str({ default: "10m", desc: "Email OTP validity (ms-compatible)" }),
   PASSWORD_RESET_TTL_MS: str({ default: "1h", desc: "Password reset link TTL (ms-compatible)" }),
+  GOOGLE_CLIENT_ID: str({
+    default: "",
+    desc: "Google OAuth client ID(s) for Sign in with Google; comma-separated if multiple",
+  }),
 });
 
 const publicApiBase =
   raw.PUBLIC_API_URL.replace(/\/$/, "") || `http://localhost:${raw.PORT}`;
+
+const googleClientIds = raw.GOOGLE_CLIENT_ID.split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 export const env = {
   nodeEnv: raw.NODE_ENV,
@@ -65,4 +73,5 @@ export const env = {
   otpCodeSecret: raw.OTP_CODE_SECRET,
   otpTtlMs: raw.OTP_TTL_MS,
   passwordResetTtlMs: raw.PASSWORD_RESET_TTL_MS,
+  googleClientIds,
 };

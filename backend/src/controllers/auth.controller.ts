@@ -19,6 +19,15 @@ export async function postSignin(req: Request, res: Response, next: NextFunction
   }
 }
 
+export async function postGoogleSignIn(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const result = await authService.signInWithGoogle(req.body);
+    res.status(200).json(result);
+  } catch (e) {
+    next(e);
+  }
+}
+
 export async function postVerifyOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const result = await authService.verifyOtp(req.body);

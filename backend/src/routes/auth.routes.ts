@@ -3,6 +3,7 @@ import * as authController from "../controllers/auth.controller";
 import { requireAuth } from "../middlewares/auth.middleware";
 import {
   forgotPasswordLimiter,
+  googleSignInLimiter,
   resendOtpLimiter,
   resetPasswordLimiter,
   verifyOtpLimiter,
@@ -12,6 +13,7 @@ const router = Router();
 
 router.post("/signup", authController.postSignup);
 router.post("/signin", authController.postSignin);
+router.post("/google", googleSignInLimiter, authController.postGoogleSignIn);
 router.post("/verify-otp", verifyOtpLimiter, authController.postVerifyOtp);
 router.post("/resend-otp", resendOtpLimiter, authController.postResendOtp);
 router.post("/forgot-password", forgotPasswordLimiter, authController.postForgotPassword);

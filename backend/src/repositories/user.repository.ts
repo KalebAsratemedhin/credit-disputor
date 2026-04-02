@@ -18,6 +18,10 @@ export async function findUserByEmail(email: string): Promise<User | null> {
   return prisma.user.findUnique({ where: { email: email.toLowerCase() } });
 }
 
+export async function findUserByGoogleSub(googleSub: string): Promise<User | null> {
+  return prisma.user.findUnique({ where: { googleSub } });
+}
+
 export async function findUserById(id: string): Promise<PublicUser | null> {
   const user = await prisma.user.findUnique({ where: { id } });
   return user ? toPublicUser(user) : null;
@@ -36,6 +40,32 @@ export async function createUser(data: {
       fullName: data.fullName,
       phoneNumber: data.phoneNumber,
     },
+  });
+  return toPublicUser(user);
+}
+
+export async function createOAuthUser(data: {
+  email: string;
+  fullName: string;
+  googleSub: string;
+}): Promise<PublicUser> {
+  const user = await prisma.user.create({
+    data: {
+      email: data.email.toLowerCase(),
+      fullName: data.fullName,
+      googleSub: data.googleSub,
+      emailVerified: true,
+      passwordHash: null,
+      phoneNumber: null,
+    },
+  });
+  return toPublicUser(user);
+}
+
+export async function linkGoogleAccount(userId: string, googleSub: string): Promise<PublicUser> {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { googleSub, emailVerified: true },
   });
   return toPublicUser(user);
 }

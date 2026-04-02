@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Credit Disputor API
   version: 1.0.0
-  description: Backend API with health checks and email/password authentication.
+  description: Backend API with health checks, email/password authentication, and optional Google sign-in (POST /auth/google).
 
 servers:
   - url: http://localhost:3000
@@ -111,6 +111,54 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
         "403":
           description: Email not verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/google:
+    post:
+      summary: Sign in or sign up with Google (ID token from Google Identity Services)
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoogleSignInRequest"
+      responses:
+        "200":
+          description: OK — same tokens as email sign-in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "401":
+          description: Invalid Google credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          description: Google account conflict for this email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "503":
+          description: Google sign-in not configured
           content:
             application/json:
               schema:
@@ -326,6 +374,7 @@ components:
           type: string
         phoneNumber:
           type: string
+          nullable: true
         emailVerified:
           type: boolean
         createdAt:
@@ -334,7 +383,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, email, fullName, phoneNumber, emailVerified, createdAt, updatedAt]
+      required: [id, email, fullName, emailVerified, createdAt, updatedAt]
 
     SignupRequest:
       type: object
@@ -360,6 +409,14 @@ components:
           format: email
         password:
           type: string
+
+    GoogleSignInRequest:
+      type: object
+      required: [idToken]
+      properties:
+        idToken:
+          type: string
+          description: JWT credential from Google Identity Services (GIS)
 
     RefreshRequest:
       type: object

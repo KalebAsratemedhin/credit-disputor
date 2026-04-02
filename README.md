@@ -36,6 +36,7 @@ From the `backend` directory:
    - `OTP_TTL_MS`, `PASSWORD_RESET_TTL_MS` — e.g. `10m`, `1h`.
    - `EMAIL_PROVIDER` — `console` (log only) or `resend`; set `RESEND_API_KEY` and `EMAIL_FROM` when using Resend.
    - `FRONTEND_URL` — base URL for password reset links (`/reset-password?token=...`).
+   - `GOOGLE_CLIENT_ID` — optional; Google OAuth **Web client ID** for `POST /auth/google` (Google Identity Services). Comma-separated for multiple clients. Leave empty to disable Google sign-in (endpoint returns 503).
    - `PUBLIC_API_URL` — optional; public origin of this API for the logo in HTML emails (`/public/logo.jpg`). Defaults to `http://localhost:PORT` when unset; set to your deployed API URL (HTTPS) in production so images load in mail clients.
    - `LOG_LEVEL`, `LOG_PRETTY` — **Pino** logging.
 

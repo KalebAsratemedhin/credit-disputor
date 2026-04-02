@@ -83,3 +83,25 @@ export class EmailDeliveryError extends AppError {
     );
   }
 }
+
+export class GoogleSignInNotConfiguredError extends AppError {
+  constructor() {
+    super("Google sign-in is not configured on this server.", 503, "GOOGLE_SIGNIN_NOT_CONFIGURED");
+  }
+}
+
+export class InvalidGoogleIdTokenError extends AppError {
+  constructor() {
+    super("Invalid or unverified Google credential.", 401, "INVALID_GOOGLE_ID_TOKEN");
+  }
+}
+
+export class GoogleAccountConflictError extends AppError {
+  constructor() {
+    super(
+      "This email is already linked to a different Google account.",
+      409,
+      "GOOGLE_ACCOUNT_CONFLICT"
+    );
+  }
+}
