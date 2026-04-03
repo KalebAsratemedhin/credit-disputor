@@ -28,11 +28,35 @@ export const verifyOtpBodySchema = z.object({
   purpose: otpPurposeApiSchema,
 });
 
+export const verifyEmailBodySchema = z.object({
+  email: z.string().email(),
+  code: z.string().regex(/^\d{4}$/, "code must be exactly 4 digits"),
+});
+
 export const resendOtpBodySchema = z
   .object({
     email: z.string().email(),
     purpose: otpPurposeApiSchema,
   });
+
+export const resendEmailVerificationBodySchema = z.object({
+  email: z.string().email(),
+});
+
+export const signinWebauthnVerifyBodySchema = z
+  .object({
+    id: z.string().min(1),
+    rawId: z.string().min(1),
+    type: z.literal("public-key"),
+    response: z.object({
+      clientDataJSON: z.string().min(1),
+      authenticatorData: z.string().min(1),
+      signature: z.string().min(1),
+      userHandle: z.string().optional(),
+    }),
+    clientExtensionResults: z.record(z.unknown()).optional(),
+  })
+  .passthrough();
  
 
 export const forgotPasswordBodySchema = z.object({
@@ -51,6 +75,12 @@ export const resetPasswordBodySchema = z
   });
 
 export type SignupBody = z.infer<typeof signupBodySchema>;
+export const signinMfaVerifyBodySchema = z.object({
+  kind: z.enum(["email_otp", "totp", "backup_code"]),
+  code: z.string().min(1, "code is required"),
+});
+
 export type SigninBody = z.infer<typeof signinBodySchema>;
+export type SigninMfaVerifyBody = z.infer<typeof signinMfaVerifyBodySchema>;
 export type RefreshBody = z.infer<typeof refreshBodySchema>;
 export type OtpPurposeApi = z.infer<typeof otpPurposeApiSchema>;

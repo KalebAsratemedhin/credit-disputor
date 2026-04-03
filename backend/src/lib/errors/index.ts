@@ -143,8 +143,16 @@ export class WebAuthnVerificationError extends AppError {
 }
 
 export class WebAuthnChallengeError extends AppError {
+  constructor(
+    message = "Security key challenge expired or missing. Start registration again."
+  ) {
+    super(message, 400, "WEBAUTHN_CHALLENGE_INVALID");
+  }
+}
+
+export class WebAuthnNotAvailableError extends AppError {
   constructor() {
-    super("Security key challenge expired or missing. Start registration again.", 400, "WEBAUTHN_CHALLENGE_INVALID");
+    super("No passkeys are registered for this account.", 400, "WEBAUTHN_NOT_AVAILABLE");
   }
 }
 
@@ -155,5 +163,23 @@ export class InvalidAvatarTypeError extends AppError {
       400,
       "INVALID_AVATAR_TYPE"
     );
+  }
+}
+
+export class MfaTokenInvalidError extends AppError {
+  constructor() {
+    super("Invalid or expired sign-in verification token.", 401, "MFA_TOKEN_INVALID");
+  }
+}
+
+export class NoBackupCodesError extends AppError {
+  constructor() {
+    super("No backup codes are available for this account.", 400, "NO_BACKUP_CODES");
+  }
+}
+
+export class InvalidMfaBackupCodeError extends AppError {
+  constructor() {
+    super("Invalid backup code.", 400, "INVALID_MFA_BACKUP_CODE");
   }
 }

@@ -1,7 +1,11 @@
 import path from "path";
+import type { IncomingMessage, ServerResponse } from "http";
 import cors from "cors";
 import express from "express";
+import pinoHttp from "pino-http";
 import { env } from "./config/env";
+import { safeHttpReqSerializer, safeHttpResSerializer } from "./lib/httpLogSerializers";
+import { logger } from "./lib/logger";
 import routes from "./routes";
 import { setupSwagger } from "./lib/swagger";
 import { errorMiddleware } from "./middlewares/error.middleware";
@@ -29,9 +33,34 @@ function corsOrigin(
   callback(null, false);
 }
 
+function httpLogSuccessObject(req: IncomingMessage, res: ServerResponse, loggable: Record<string, unknown>) {
+  return { ...loggable, statusCode: res.statusCode };
+}
+
+function httpLogErrorObject(
+  req: IncomingMessage,
+  res: ServerResponse,
+  _err: Error,
+  loggable: Record<string, unknown>
+) {
+  return { ...loggable, statusCode: res.statusCode };
+}
+
 export function createApp(): express.Express {
   const app = express();
   app.set("trust proxy", 1);
+  app.use(
+    pinoHttp({
+      logger,
+      wrapSerializers: false,
+      serializers: {
+        req: safeHttpReqSerializer,
+        res: safeHttpResSerializer,
+      },
+      customSuccessObject: httpLogSuccessObject,
+      customErrorObject: httpLogErrorObject,
+    })
+  );
   app.use(cors({ origin: corsOrigin, credentials: true }));
   app.use(express.json());
   app.use("/public", express.static(path.join(process.cwd(), "public")));

@@ -49,6 +49,30 @@ export const resendOtpLimiter = rateLimit({
   message: { message: "Too many resend requests. Try again later.", code: "RATE_LIMITED" },
 });
 
+export const signinMfaSendLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS.FIFTEEN_MINUTES,
+  max: RATE_LIMIT_MAX_REQUESTS.SIGNIN_MFA_SEND,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many code requests. Try again later.", code: "RATE_LIMITED" },
+});
+
+export const signinMfaVerifyLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS.FIFTEEN_MINUTES,
+  max: RATE_LIMIT_MAX_REQUESTS.SIGNIN_MFA_VERIFY,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many verification attempts. Try again later.", code: "RATE_LIMITED" },
+});
+
+export const signinMfaWebauthnOptionsLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS.FIFTEEN_MINUTES,
+  max: RATE_LIMIT_MAX_REQUESTS.SIGNIN_MFA_WEBAUTHN_OPTIONS,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many passkey sign-in attempts. Try again later.", code: "RATE_LIMITED" },
+});
+
 export const forgotPasswordLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS.ONE_HOUR,
   max: RATE_LIMIT_MAX_REQUESTS.FORGOT_PASSWORD,

@@ -29,9 +29,11 @@ import {
   WebAuthnVerificationError,
 } from "../lib/errors";
 import type { PublicUser } from "../lib/types/user";
+import * as backupCodeRepository from "../repositories/backupCode.repository";
 import * as refreshTokenRepository from "../repositories/refreshToken.repository";
-import * as settingsRepository from "../repositories/settings.repository";
+import * as totpRepository from "../repositories/totp.repository";
 import * as userRepository from "../repositories/user.repository";
+import * as webauthnRepository from "../repositories/webauthn.repository";
 import {
   changePasswordBodySchema,
   patchProfileBodySchema,
@@ -72,7 +74,7 @@ async function persistBackupCodes(userId: string, plainCodes: string[]): Promise
     codeHashes.push(await bcrypt.hash(c, BCRYPT_COST));
   }
 
-  await settingsRepository.replaceBackupCodesForUser(userId, batchId, codeHashes);
+  await backupCodeRepository.replaceBackupCodesForUser(userId, batchId, codeHashes);
 }
 
 export async function getProfile(userId: string): Promise<PublicUser> {
@@ -134,9 +136,9 @@ export async function getSecurityStatus(userId: string): Promise<{
   backupCodesRemaining: number;
   webauthnCredentialCount: number;
 }> {
-  const totp = await settingsRepository.findUserTotpByUserId(userId);
-  const backupCodesRemaining = await settingsRepository.countUnusedBackupCodes(userId);
-  const webauthnCredentialCount = await settingsRepository.countWebauthnCredentials(userId);
+  const totp = await totpRepository.findUserTotpByUserId(userId);
+  const backupCodesRemaining = await backupCodeRepository.countUnusedBackupCodes(userId);
+  const webauthnCredentialCount = await webauthnRepository.countWebauthnCredentials(userId);
 
   return {
     totpEnabled: totp?.enabled ?? false,
@@ -149,7 +151,7 @@ export async function beginTotpSetup(
   userId: string,
   email: string
 ): Promise<{ otpauthUrl: string; secretBase32: string }> {
-  const existing = await settingsRepository.findUserTotpByUserId(userId);
+  const existing = await totpRepository.findUserTotpByUserId(userId);
   if (existing?.enabled) {
     throw new TotpAlreadyEnabledError();
   }
@@ -157,7 +159,7 @@ export async function beginTotpSetup(
   const secret = authenticator.generateSecret();
   const secretEnc = encryptUtf8(secret, getTotpKey());
 
-  await settingsRepository.upsertPendingUserTotp(userId, secretEnc);
+  await totpRepository.upsertPendingUserTotp(userId, secretEnc);
 
   const issuer = env.webauthnRpName.replace(/:/g, "");
   const otpauthUrl = authenticator.keyuri(email, issuer, secret);
@@ -169,7 +171,7 @@ export async function verifyTotpAndEnable(
   userId: string,
   code: string
 ): Promise<{ backupCodes: string[] }> {
-  const row = await settingsRepository.findUserTotpByUserId(userId);
+  const row = await totpRepository.findUserTotpByUserId(userId);
   if (!row) {
     throw new TotpNotConfiguredError();
   }
@@ -186,7 +188,7 @@ export async function verifyTotpAndEnable(
     throw new InvalidTotpCodeError();
   }
 
-  await settingsRepository.markUserTotpEnabled(userId);
+  await totpRepository.markUserTotpEnabled(userId);
 
   const backupCodes = generateBackupCodeStrings();
   await persistBackupCodes(userId, backupCodes);
@@ -195,12 +197,12 @@ export async function verifyTotpAndEnable(
 }
 
 export async function disableTotp(userId: string): Promise<void> {
-  await settingsRepository.deleteBackupCodesForUser(userId);
-  await settingsRepository.deleteUserTotpForUser(userId);
+  await backupCodeRepository.deleteBackupCodesForUser(userId);
+  await totpRepository.deleteUserTotpForUser(userId);
 }
 
 export async function regenerateBackupCodes(userId: string): Promise<{ backupCodes: string[] }> {
-  const row = await settingsRepository.findUserTotpByUserId(userId);
+  const row = await totpRepository.findUserTotpByUserId(userId);
   if (!row?.enabled) {
     throw new TotpNotConfiguredError();
   }
@@ -217,9 +219,9 @@ export async function webauthnRegistrationOptions(userId: string) {
     throw new NotFoundError("User");
   }
 
-  await settingsRepository.deleteRegistrationChallengesForUser(userId);
+  await webauthnRepository.deleteRegistrationChallengesForUser(userId);
 
-  const existing = await settingsRepository.listWebauthnCredentialsForExclude(userId);
+  const existing = await webauthnRepository.listWebauthnCredentialsForExclude(userId);
   const excludeCredentials = existing.map((e) => ({
     id: e.credentialId,
     transports: e.transports
@@ -242,7 +244,7 @@ export async function webauthnRegistrationOptions(userId: string) {
   });
 
   const expiresAt = new Date(Date.now() + WEBAUTHN_REGISTRATION_CHALLENGE_TTL_MS);
-  await settingsRepository.createRegistrationChallenge({
+  await webauthnRepository.createRegistrationChallenge({
     userId,
     challenge: options.challenge,
     expiresAt,
@@ -256,7 +258,7 @@ export async function webauthnRegistrationVerify(
   nickname: string,
   response: RegistrationResponseJSON
 ): Promise<void> {
-  const challengeRow = await settingsRepository.findLatestRegistrationChallenge(userId);
+  const challengeRow = await webauthnRepository.findLatestRegistrationChallenge(userId);
   if (!challengeRow) {
     throw new WebAuthnChallengeError();
   }
@@ -273,7 +275,7 @@ export async function webauthnRegistrationVerify(
     throw new WebAuthnVerificationError();
   }
 
-  await settingsRepository.deleteWebauthnChallengeById(challengeRow.id);
+  await webauthnRepository.deleteWebauthnChallengeById(challengeRow.id);
 
   if (!verification.verified || !verification.registrationInfo) {
     throw new WebAuthnVerificationError();
@@ -286,7 +288,7 @@ export async function webauthnRegistrationVerify(
       ? JSON.stringify(credential.transports)
       : null;
 
-  await settingsRepository.insertWebauthnCredential({
+  await webauthnRepository.insertWebauthnCredential({
     userId,
     credentialId: credential.id,
     publicKey,
@@ -297,11 +299,11 @@ export async function webauthnRegistrationVerify(
 }
 
 export async function listWebauthnCredentials(userId: string) {
-  return settingsRepository.listWebauthnCredentialsForDisplay(userId);
+  return webauthnRepository.listWebauthnCredentialsForDisplay(userId);
 }
 
 export async function removeWebauthnCredential(userId: string, credentialRowId: string): Promise<boolean> {
-  const count = await settingsRepository.deleteWebauthnCredential(userId, credentialRowId);
+  const count = await webauthnRepository.deleteWebauthnCredential(userId, credentialRowId);
 
   return count > 0;
 }

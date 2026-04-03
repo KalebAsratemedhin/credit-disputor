@@ -13,6 +13,10 @@ const raw = cleanEnv(process.env, {
     default: "15m",
     desc: "Access JWT TTL (jsonwebtoken expiresIn string)",
   }),
+  JWT_MFA_EXPIRES_IN: str({
+    default: "10m",
+    desc: "Step-up MFA JWT TTL after password sign-in (jsonwebtoken expiresIn string)",
+  }),
   REFRESH_TOKEN_EXPIRES_IN: str({
     default: "7d",
     desc: "Refresh token storage TTL (ms-compatible string)",
@@ -78,6 +82,7 @@ export const env = {
   databaseUrl: raw.DATABASE_URL,
   jwtSecret: raw.JWT_SECRET,
   jwtAccessExpiresIn: raw.JWT_ACCESS_EXPIRES_IN,
+  jwtMfaExpiresIn: raw.JWT_MFA_EXPIRES_IN,
   refreshTokenExpiresIn: raw.REFRESH_TOKEN_EXPIRES_IN,
   logLevel: raw.LOG_LEVEL,
   logPretty: raw.LOG_PRETTY,

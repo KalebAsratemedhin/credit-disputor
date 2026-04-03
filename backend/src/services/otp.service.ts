@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import type { EmailOtpPurpose } from "@prisma/client";
+import { EmailOtpPurpose } from "@prisma/client";
 import ms, { type StringValue } from "ms";
 import { env } from "../config/env";
 import { OtpInvalidError } from "../lib/errors";
@@ -45,7 +45,9 @@ function timingSafeEqualHex(a: string, b: string): boolean {
 }
 
 function purposeLabel(purpose: EmailOtpPurpose): string {
-  void purpose;
+  if (purpose === EmailOtpPurpose.SIGNIN) {
+    return "Complete sign-in";
+  }
   return "Verify your email";
 }
 

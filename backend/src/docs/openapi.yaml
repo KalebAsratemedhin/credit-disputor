@@ -3,9 +3,10 @@ info:
   title: Credit Disputor API
   version: 1.0.0
   description: |
-    Backend API with health checks, email/password authentication, optional Google sign-in (POST /auth/google),
-    and authenticated account APIs under `/v1` (profile, password, avatar, TOTP, backup codes, WebAuthn).
-    `GET /auth/me` remains available; `GET /v1/me` returns the same user shape including `avatarUrl`.
+    Backend API with health checks, email/password sign-in (password then MFA via `mfaToken`: email OTP, TOTP, backup code, or WebAuthn passkey),
+    optional Google sign-in (POST /auth/google, tokens without MFA), and authenticated `/v1` APIs
+    (profile, password, avatar, preferences, TOTP, backup codes, WebAuthn).
+    `GET /auth/me` and `GET /v1/me` return the same user shape including `avatarUrl`.
 
 servers:
   - url: http://localhost:3000
@@ -65,7 +66,7 @@ paths:
               $ref: "#/components/schemas/SignupRequest"
       responses:
         "201":
-          description: Created — verify email with OTP; tokens are returned from POST /auth/verify-otp
+          description: Created — verify email with OTP; tokens are returned from POST /auth/verify-email (or legacy POST /auth/verify-otp)
           content:
             application/json:
               schema:
@@ -85,7 +86,14 @@ paths:
 
   /auth/signin:
     post:
-      summary: Sign in with email and password
+      summary: Sign in with email and password (MFA step follows)
+      description: |
+        On success returns a step-up `mfaToken` (not session tokens). For the next calls, set
+        **`Authorization: Bearer <mfaToken>`** on `POST /auth/signin/send-code` (optional email OTP),
+        `POST /auth/signin/resend-code`, `POST /auth/signin/mfa/verify`, and (when `mfaMethods.webauthn` is true)
+        `POST /auth/signin/webauthn/authentication-options` then `POST /auth/signin/webauthn/authentication-verify`.
+        Use the **mfaBearer** scheme in Swagger UI.
+        `POST /auth/google` does not use this flow.
       tags: [Auth]
       requestBody:
         required: true
@@ -95,11 +103,13 @@ paths:
               $ref: "#/components/schemas/SigninRequest"
       responses:
         "200":
-          description: OK — session tokens issued (requires email to be verified)
+          description: |
+            MFA required. Use the returned `mfaToken` value as **`Authorization: Bearer <mfaToken>`**
+            on send-code, resend-code, mfa/verify, and WebAuthn sign-in endpoints (see **mfaBearer**).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/SigninMfaRequiredResponse"
         "400":
           description: Validation error
           content:
@@ -119,9 +129,204 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
 
+  /auth/signin/send-code:
+    post:
+      summary: Send 4-digit email OTP for password sign-in MFA
+      description: |
+        Requires **`Authorization: Bearer <mfaToken>`** where `mfaToken` is the JWT from `POST /auth/signin`.
+        This is **not** the same as the session `accessToken` issued after MFA completes.
+      tags: [Auth]
+      security:
+        - mfaBearer: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkAckResponse"
+        "401":
+          description: |
+            Missing or empty `Authorization: Bearer` (e.g. `UNAUTHORIZED` / "Sign-in verification token required."),
+            invalid/expired `mfaToken` (`MFA_TOKEN_INVALID`), or wrong token type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/signin/resend-code:
+    post:
+      summary: Resend sign-in MFA email OTP (same as send-code)
+      description: |
+        Same as send-code: **`Authorization: Bearer <mfaToken>`** (JWT from `POST /auth/signin`, not `accessToken`).
+      tags: [Auth]
+      security:
+        - mfaBearer: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkAckResponse"
+        "401":
+          description: |
+            Missing or empty `Authorization: Bearer`, invalid/expired `mfaToken`, or wrong token type.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/signin/mfa/verify:
+    post:
+      summary: Complete password sign-in MFA (email OTP, TOTP, or backup code; passkeys use WebAuthn endpoints)
+      description: |
+        Requires **`Authorization: Bearer <mfaToken>`** (same step-up JWT from `POST /auth/signin` as send-code/resend-code).
+        Request body carries `kind` and `code`. On success, response is normal session tokens (`accessToken`, `refreshToken`).
+      tags: [Auth]
+      security:
+        - mfaBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SigninMfaVerifyRequest"
+      responses:
+        "200":
+          description: OK — session tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation or wrong code / MFA not available for chosen kind
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorBody"
+                  - $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: |
+            Missing/empty Bearer `mfaToken`, or invalid/expired step-up JWT. Use `mfaToken` from sign-in, not `accessToken`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/signin/webauthn/authentication-options:
+    post:
+      summary: Passkey sign-in MFA — get WebAuthn assertion options
+      description: |
+        Requires **`Authorization: Bearer <mfaToken>`**. Returns `PublicKeyCredentialRequestOptionsJSON` for `@simplewebauthn/browser` `startAuthentication()`.
+        Only valid when the user has registered passkeys (`mfaMethods.webauthn`). Then call **`POST /auth/signin/webauthn/authentication-verify`** with the assertion.
+      tags: [Auth]
+      security:
+        - mfaBearer: []
+      responses:
+        "200":
+          description: WebAuthn authentication options (JSON for the browser API)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "400":
+          description: No passkeys registered (`WEBAUTHN_NOT_AVAILABLE`) or other error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Missing/invalid `mfaToken`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/signin/webauthn/authentication-verify:
+    post:
+      summary: Passkey sign-in MFA — verify assertion and issue session tokens
+      description: |
+        Requires **`Authorization: Bearer <mfaToken>`**. Body is the `AuthenticationResponseJSON` from the browser after `startAuthentication()`.
+      tags: [Auth]
+      security:
+        - mfaBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebAuthnAuthenticationVerifyRequest"
+      responses:
+        "200":
+          description: OK — session tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation, invalid/expired challenge, or verification failed
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorBody"
+                  - $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Missing/invalid `mfaToken`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
   /auth/google:
     post:
       summary: Sign in or sign up with Google (ID token from Google Identity Services)
+      description: Issues session tokens in one step; no post-login MFA (unlike email/password sign-in).
       tags: [Auth]
       requestBody:
         required: true
@@ -167,9 +372,82 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
 
+  /auth/verify-email:
+    post:
+      summary: Verify email after signup (signup verification code)
+      description: |
+        Confirms the account email using the 4-digit code sent after **`POST /auth/signup`**. This is **not** sign-in MFA
+        (that flow uses `/auth/signin/send-code` and `/auth/signin/mfa/verify`).
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "200":
+          description: OK — session tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation or invalid OTP
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorBody"
+                  - $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Unknown user (generic)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /auth/resend-email-verification:
+    post:
+      summary: Resend signup email verification code
+      description: Same behavior as legacy **`POST /auth/resend-otp`**; does not resend sign-in MFA codes.
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResendEmailVerificationRequest"
+      responses:
+        "200":
+          description: Always OK (no enumeration)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkAckResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
   /auth/verify-otp:
     post:
-      summary: Verify email OTP after signup (one-time email verification)
+      deprecated: true
+      summary: "[Deprecated] Verify signup email OTP — use POST /auth/verify-email"
       tags: [Auth]
       requestBody:
         required: true
@@ -207,7 +485,8 @@ paths:
 
   /auth/resend-otp:
     post:
-      summary: Resend signup verification OTP
+      deprecated: true
+      summary: "[Deprecated] Resend signup verification — use POST /auth/resend-email-verification"
       tags: [Auth]
       requestBody:
         required: true
@@ -411,6 +690,67 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
         "404":
           description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/me/preferences:
+    get:
+      summary: Privacy and notification preferences (Bearer)
+      description: |
+        Returns the application preference catalog merged with this user's stored overrides (`UserPreference` rows keyed by slug).
+        Title, description, and defaults come from server code (`backend/src/lib/preferences/catalog.ts`).
+      tags: [Settings]
+      security:
+        - bearerJwt: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferencesResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+    patch:
+      summary: Update preferences by key (Bearer)
+      description: |
+        Body is a map of preference `key` (string) to boolean. Only keys defined in the server catalog are accepted.
+      tags: [Settings]
+      security:
+        - bearerJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchPreferencesRequest"
+      responses:
+        "200":
+          description: OK — same shape as GET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PreferencesResponse"
+        "400":
+          description: Validation error (unknown keys, empty body)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "401":
+          description: Missing or invalid token
           content:
             application/json:
               schema:
@@ -798,7 +1138,21 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT from signup, signin, or refresh (`accessToken`).
+      description: JWT from signup, signin MFA verify, or refresh (`accessToken`).
+    mfaBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        **Sign-in step-up token (not the session access token).**
+
+        After `POST /auth/signin`, copy the `mfaToken` string from the response and authorize these requests with the standard HTTP header:
+
+        `Authorization: Bearer <mfaToken>`
+
+        Use this scheme for `POST /auth/signin/send-code`, `POST /auth/signin/resend-code`, `POST /auth/signin/mfa/verify`,
+        `POST /auth/signin/webauthn/authentication-options`, and `POST /auth/signin/webauthn/authentication-verify` only.
+        Do not use `accessToken` here. In Swagger UI, click **Authorize**, choose this scheme, and paste **only** the JWT value (the UI adds the `Bearer ` prefix).
 
   schemas:
     PublicUser:
@@ -879,6 +1233,50 @@ components:
         refreshToken:
           type: string
 
+    SigninMfaRequiredResponse:
+      type: object
+      required: [mfaRequired, mfaToken, maskedEmail, mfaMethods]
+      properties:
+        mfaRequired:
+          type: boolean
+          enum: [true]
+        mfaToken:
+          type: string
+          description: |
+            JWT for the MFA step only. Send as **`Authorization: Bearer <mfaToken>`** on
+            `/auth/signin/send-code`, `/auth/signin/resend-code`, `/auth/signin/mfa/verify`, and passkey MFA endpoints under `/auth/signin/webauthn/`.
+            Do not confuse with `accessToken` (issued only after successful MFA).
+        maskedEmail:
+          type: string
+        mfaMethods:
+          $ref: "#/components/schemas/MfaMethods"
+
+    MfaMethods:
+      type: object
+      required: [emailOtp, totp, backupCode, webauthn]
+      properties:
+        emailOtp:
+          type: boolean
+          description: Always true; email OTP is always offered after password.
+        totp:
+          type: boolean
+        backupCode:
+          type: boolean
+        webauthn:
+          type: boolean
+          description: True when the user has at least one registered passkey; use WebAuthn authentication-options/verify endpoints.
+
+    SigninMfaVerifyRequest:
+      type: object
+      required: [kind, code]
+      properties:
+        kind:
+          type: string
+          enum: [email_otp, totp, backup_code]
+        code:
+          type: string
+          description: Four-digit email OTP, authenticator code, or eight-digit backup code
+
     SignupPendingResponse:
       type: object
       required: [user, verificationRequired]
@@ -888,6 +1286,53 @@ components:
         verificationRequired:
           type: boolean
           enum: [true]
+
+    VerifyEmailRequest:
+      type: object
+      required: [email, code]
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          pattern: "^\\d{4}$"
+
+    ResendEmailVerificationRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    WebAuthnAuthenticationVerifyRequest:
+      type: object
+      required: [id, rawId, type, response]
+      properties:
+        id:
+          type: string
+        rawId:
+          type: string
+        type:
+          type: string
+          enum: [public-key]
+        response:
+          type: object
+          required: [clientDataJSON, authenticatorData, signature]
+          properties:
+            clientDataJSON:
+              type: string
+            authenticatorData:
+              type: string
+            signature:
+              type: string
+            userHandle:
+              type: string
+        clientExtensionResults:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
 
     VerifyOtpRequest:
       type: object
@@ -1073,6 +1518,53 @@ components:
         avatarUrl:
           type: string
 
+    PreferenceItem:
+      type: object
+      required: [key, title, description, value]
+      properties:
+        key:
+          type: string
+          description: Stable slug (e.g. `emailMarketing`)
+        title:
+          type: string
+        description:
+          type: string
+        value:
+          type: boolean
+
+    PreferencesResponse:
+      type: object
+      required: [privacy, notifications, updatedAt]
+      properties:
+        privacy:
+          type: array
+          items:
+            $ref: "#/components/schemas/PreferenceItem"
+        notifications:
+          type: object
+          required: [email, push]
+          properties:
+            email:
+              type: array
+              items:
+                $ref: "#/components/schemas/PreferenceItem"
+            push:
+              type: array
+              items:
+                $ref: "#/components/schemas/PreferenceItem"
+        updatedAt:
+          type: string
+          format: date-time
+
+    PatchPreferencesRequest:
+      type: object
+      minProperties: 1
+      additionalProperties:
+        type: boolean
+      description: |
+        Example: `{ "emailMarketing": false, "pushBrowserNotifications": true }`.
+        Keys must be listed in the server preference catalog.
+
     WebauthnRegistrationOptions:
       type: object
       description: PublicKeyCredentialCreationOptionsJSON shape from @simplewebauthn/server generateRegistrationOptions
@@ -1107,6 +1599,6 @@ tags:
   - name: Health
   - name: Auth
   - name: Settings
-    description: Authenticated profile, password, and avatar (`/v1/me`)
+    description: Authenticated profile, password, avatar, and preferences (`/v1/me`, `/v1/me/preferences`)
   - name: Security
     description: TOTP, backup codes, and WebAuthn passkeys (`/v1/security`)

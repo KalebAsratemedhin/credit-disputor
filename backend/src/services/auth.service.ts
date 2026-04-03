@@ -4,6 +4,7 @@ import jwt, { type SignOptions } from "jsonwebtoken";
 import ms, { type StringValue } from "ms";
 import { OAuth2Client } from "google-auth-library";
 import { EmailOtpPurpose } from "@prisma/client";
+import { z } from "zod";
 import { env } from "../config/env";
 import {
   EmailTakenError,
@@ -19,19 +20,28 @@ import {
 } from "../lib/errors";
 import { AppError } from "../lib/utils/errors";
 import { logger } from "../lib/logger";
+import * as backupCodeRepository from "../repositories/backupCode.repository";
 import * as passwordResetRepository from "../repositories/passwordReset.repository";
 import * as refreshTokenRepository from "../repositories/refreshToken.repository";
+import * as totpRepository from "../repositories/totp.repository";
 import * as userRepository from "../repositories/user.repository";
+import * as webauthnRepository from "../repositories/webauthn.repository";
+import { maskEmail } from "../lib/mfa/maskEmail";
+import { signMfaToken } from "../lib/mfa/mfaToken";
+import { verifyAndConsumeBackupCodeForUser } from "../lib/mfa/verifyBackupForUser";
+import { verifyTotpCodeForUser } from "../lib/mfa/verifyTotpForUser";
 import {
   forgotPasswordBodySchema,
   refreshBodySchema,
+  resendEmailVerificationBodySchema,
   resendOtpBodySchema,
   resetPasswordBodySchema,
   googleSignInBodySchema,
   signinBodySchema,
+  signinMfaVerifyBodySchema,
   signupBodySchema,
+  verifyEmailBodySchema,
   verifyOtpBodySchema,
-  type OtpPurposeApi,
 } from "../lib/validation/auth.schemas";
 import type { PublicUser } from "../lib/types/user";
 import { sendPasswordResetEmail } from "./email/email.service";
@@ -66,11 +76,32 @@ export type SignupPendingResponse = {
   verificationRequired: true;
 };
 
-export type SigninResult = AuthResponse;
+export type MfaMethods = {
+  emailOtp: true;
+  totp: boolean;
+  backupCode: boolean;
+  webauthn: boolean;
+};
 
-function apiPurposeToDb(p: OtpPurposeApi): EmailOtpPurpose {
-  void p;
-  return EmailOtpPurpose.SIGNUP_VERIFY;
+export type SigninMfaRequiredResponse = {
+  mfaRequired: true;
+  mfaToken: string;
+  maskedEmail: string;
+  mfaMethods: MfaMethods;
+};
+
+export type SigninResult = AuthResponse | SigninMfaRequiredResponse;
+
+async function buildMfaMethods(userId: string): Promise<MfaMethods> {
+  const totp = await totpRepository.findUserTotpByUserId(userId);
+  const backupRemaining = await backupCodeRepository.countUnusedBackupCodes(userId);
+  const webauthnCount = await webauthnRepository.countWebauthnCredentials(userId);
+  return {
+    emailOtp: true,
+    totp: totp?.enabled ?? false,
+    backupCode: backupRemaining > 0,
+    webauthn: webauthnCount > 0,
+  };
 }
 
 function readEmailVerified(userRecord: unknown): boolean {
@@ -126,6 +157,15 @@ async function issueTokenPair(user: PublicUser): Promise<AuthResponse> {
   const accessToken = signAccessToken(user.id, user.email);
   const refreshToken = await issueRefreshToken(user.id);
   return { user, accessToken, refreshToken };
+}
+
+/** Issue session tokens after password sign-in MFA (email OTP, TOTP, backup, or WebAuthn). */
+export async function issueAuthTokensAfterMfa(userId: string): Promise<AuthResponse> {
+  const user = await userRepository.findUserById(userId);
+  if (!user) {
+    throw new InvalidCredentialsError();
+  }
+  return issueTokenPair(user);
 }
 
 async function verifyGoogleIdToken(idToken: string): Promise<{
@@ -228,9 +268,20 @@ export async function signin(rawBody: unknown): Promise<SigninResult> {
   if (!user) {
     throw new InvalidCredentialsError();
   }
-  return await issueTokenPair(user);
+
+  const mfaMethods = await buildMfaMethods(user.id);
+  return {
+    mfaRequired: true,
+    mfaToken: signMfaToken(user.id, user.email),
+    maskedEmail: maskEmail(user.email),
+    mfaMethods,
+  };
 }
 
+/**
+ * Post-login email OTP / TOTP / backup MFA applies to password sign-in only.
+ * Google Identity Services is treated as sufficient authentication; tokens are issued immediately.
+ */
 export async function signInWithGoogle(rawBody: unknown): Promise<AuthResponse> {
   const parsed = googleSignInBodySchema.safeParse(rawBody);
   if (!parsed.success) {
@@ -301,20 +352,65 @@ export async function signInWithGoogle(rawBody: unknown): Promise<AuthResponse> 
   }
 }
 
-export async function verifyOtp(rawBody: unknown): Promise<AuthResponse> {
-  const parsed = verifyOtpBodySchema.safeParse(rawBody);
+export async function sendSigninMfaCode(userId: string): Promise<{ ok: true }> {
+  const record = await userRepository.findUserRecordById(userId);
+  if (!record) {
+    throw new NotFoundError("User");
+  }
+  await otpService.sendOtp({
+    userId,
+    email: record.email,
+    firstName: record.fullName.split(/\s+/)[0] ?? record.fullName,
+    purpose: EmailOtpPurpose.SIGNIN,
+  });
+  return { ok: true };
+}
+
+export async function resendSigninMfaCode(userId: string): Promise<{ ok: true }> {
+  return sendSigninMfaCode(userId);
+}
+
+export async function verifySigninMfa(userId: string, rawBody: unknown): Promise<AuthResponse> {
+  const parsed = signinMfaVerifyBodySchema.safeParse(rawBody);
   if (!parsed.success) {
     throw new ValidationAppError(parsed.error);
   }
-  const { email, code, purpose } = parsed.data;
-  const dbPurpose = apiPurposeToDb(purpose);
+  const { kind, code } = parsed.data;
 
+  if (kind === "email_otp") {
+    const c = code.trim();
+    if (!/^\d{4}$/.test(c)) {
+      throw new ValidationAppError(
+        new z.ZodError([
+          {
+            code: z.ZodIssueCode.custom,
+            message: "code must be exactly 4 digits",
+            path: ["code"],
+          },
+        ])
+      );
+    }
+    await otpService.verifyOtp({ userId, code: c, purpose: EmailOtpPurpose.SIGNIN });
+  } else if (kind === "totp") {
+    await verifyTotpCodeForUser(userId, code);
+  } else {
+    await verifyAndConsumeBackupCodeForUser(userId, code);
+  }
+
+  return issueAuthTokensAfterMfa(userId);
+}
+
+async function verifySignupEmailWithCode(email: string, code: string): Promise<AuthResponse> {
   const userRecord = await userRepository.findUserByEmail(email);
   if (!userRecord) {
     throw new InvalidCredentialsError();
   }
 
-  await otpService.verifyOtp({ userId: userRecord.id, code, purpose: dbPurpose });
+  await otpService.verifyOtp({
+    userId: userRecord.id,
+    code,
+    purpose: EmailOtpPurpose.SIGNUP_VERIFY,
+  });
 
   if (!readEmailVerified(userRecord)) {
     await userRepository.setEmailVerified(userRecord.id, true);
@@ -325,17 +421,10 @@ export async function verifyOtp(rawBody: unknown): Promise<AuthResponse> {
     throw new InvalidCredentialsError();
   }
 
-  return await issueTokenPair(user);
+  return issueTokenPair(user);
 }
 
-export async function resendOtp(rawBody: unknown): Promise<{ ok: true }> {
-  const parsed = resendOtpBodySchema.safeParse(rawBody);
-  if (!parsed.success) {
-    throw new ValidationAppError(parsed.error);
-  }
-  const { email, purpose } = parsed.data;
-  const dbPurpose = apiPurposeToDb(purpose);
-
+async function resendSignupVerificationEmail(email: string): Promise<{ ok: true }> {
   const userRecord = await userRepository.findUserByEmail(email);
   if (!userRecord) {
     return { ok: true };
@@ -349,10 +438,44 @@ export async function resendOtp(rawBody: unknown): Promise<{ ok: true }> {
     userId: userRecord.id,
     email: userRecord.email,
     firstName: userRecord.fullName.split(/\s+/)[0] ?? userRecord.fullName,
-    purpose: dbPurpose,
+    purpose: EmailOtpPurpose.SIGNUP_VERIFY,
   });
 
   return { ok: true };
+}
+
+export async function verifyOtp(rawBody: unknown): Promise<AuthResponse> {
+  const parsed = verifyOtpBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new ValidationAppError(parsed.error);
+  }
+  const { email, code } = parsed.data;
+  return verifySignupEmailWithCode(email, code);
+}
+
+export async function verifyEmail(rawBody: unknown): Promise<AuthResponse> {
+  const parsed = verifyEmailBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new ValidationAppError(parsed.error);
+  }
+  const { email, code } = parsed.data;
+  return verifySignupEmailWithCode(email, code);
+}
+
+export async function resendOtp(rawBody: unknown): Promise<{ ok: true }> {
+  const parsed = resendOtpBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new ValidationAppError(parsed.error);
+  }
+  return resendSignupVerificationEmail(parsed.data.email);
+}
+
+export async function resendEmailVerification(rawBody: unknown): Promise<{ ok: true }> {
+  const parsed = resendEmailVerificationBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new ValidationAppError(parsed.error);
+  }
+  return resendSignupVerificationEmail(parsed.data.email);
 }
 
 export async function refresh(rawBody: unknown): Promise<AuthResponse> {
