@@ -35,6 +35,13 @@ import {
 } from "../lib/validation/auth.schemas";
 import type { PublicUser } from "../lib/types/user";
 import { sendPasswordResetEmail } from "./email/email.service";
+import {
+  AUTH_OPAQUE_TOKEN_BYTES,
+  BCRYPT_COST,
+  FORGOT_PASSWORD_ACK,
+  MS_PER_MINUTE,
+  RESET_PASSWORD_SUCCESS_MESSAGE,
+} from "../lib/constants";
 import * as otpService from "./otp.service";
 
 const googleOAuthClient = new OAuth2Client();
@@ -79,11 +86,11 @@ function hashPasswordResetToken(raw: string): string {
 }
 
 function generateRefreshTokenValue(): string {
-  return crypto.randomBytes(32).toString("base64url");
+  return crypto.randomBytes(AUTH_OPAQUE_TOKEN_BYTES).toString("base64url");
 }
 
 function generatePasswordResetTokenValue(): string {
-  return crypto.randomBytes(32).toString("base64url");
+  return crypto.randomBytes(AUTH_OPAQUE_TOKEN_BYTES).toString("base64url");
 }
 
 function refreshTokenTtlMs(): number {
@@ -168,7 +175,7 @@ export async function signup(rawBody: unknown): Promise<SignupPendingResponse> {
     throw new EmailTakenError();
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
   try {
     const user = await userRepository.createUser({
@@ -377,9 +384,6 @@ export async function getProfile(userId: string): Promise<PublicUser> {
   return user;
 }
 
-const FORGOT_PASSWORD_ACK =
-  "If an account exists for that email, you will receive password reset instructions shortly.";
-
 export async function forgotPassword(rawBody: unknown): Promise<{ message: string }> {
   const parsed = forgotPasswordBodySchema.safeParse(rawBody);
   if (!parsed.success) {
@@ -404,7 +408,7 @@ export async function forgotPassword(rawBody: unknown): Promise<{ message: strin
 
   const base = env.frontendUrl.replace(/\/$/, "");
   const resetUrl = `${base}/reset-password?token=${encodeURIComponent(rawToken)}`;
-  const ttlMin = Math.max(1, Math.round(passwordResetTtlMs() / 60_000));
+  const ttlMin = Math.max(1, Math.round(passwordResetTtlMs() / MS_PER_MINUTE));
   try {
     await sendPasswordResetEmail({
       to: userRecord.email,
@@ -435,10 +439,10 @@ export async function resetPassword(rawBody: unknown): Promise<{ message: string
     throw new ResetTokenInvalidError();
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
   await userRepository.updatePasswordHash(row.userId, passwordHash);
   await passwordResetRepository.markResetTokenUsed(row.id);
   await refreshTokenRepository.deleteRefreshTokensForUser(row.userId);
 
-  return { message: "Password has been reset. You can sign in with your new password." };
+  return { message: RESET_PASSWORD_SUCCESS_MESSAGE };
 }

@@ -8,6 +8,7 @@ function toPublicUser(user: User): PublicUser {
     email: user.email,
     fullName: user.fullName,
     phoneNumber: user.phoneNumber,
+    avatarUrl: user.avatarUrl,
     emailVerified: user.emailVerified,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
@@ -25,6 +26,10 @@ export async function findUserByGoogleSub(googleSub: string): Promise<User | nul
 export async function findUserById(id: string): Promise<PublicUser | null> {
   const user = await prisma.user.findUnique({ where: { id } });
   return user ? toPublicUser(user) : null;
+}
+
+export async function findUserRecordById(id: string): Promise<User | null> {
+  return prisma.user.findUnique({ where: { id } });
 }
 
 export async function createUser(data: {
@@ -82,4 +87,26 @@ export async function updatePasswordHash(userId: string, passwordHash: string): 
     where: { id: userId },
     data: { passwordHash },
   });
+}
+
+export async function updateProfile(
+  userId: string,
+  data: { fullName?: string; phoneNumber?: string | null }
+): Promise<PublicUser> {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(data.fullName !== undefined ? { fullName: data.fullName } : {}),
+      ...(data.phoneNumber !== undefined ? { phoneNumber: data.phoneNumber } : {}),
+    },
+  });
+  return toPublicUser(user);
+}
+
+export async function updateAvatarUrl(userId: string, avatarUrl: string | null): Promise<PublicUser> {
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { avatarUrl },
+  });
+  return toPublicUser(user);
 }

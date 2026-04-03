@@ -5,10 +5,14 @@ import { env } from "../config/env";
 import { OtpInvalidError } from "../lib/errors";
 import { AppError } from "../lib/utils/errors";
 import { logger } from "../lib/logger";
+import {
+  EMAIL_OTP_DIGIT_COUNT,
+  EMAIL_OTP_RANDOM_EXCLUSIVE_MAX,
+  MS_PER_MINUTE,
+  OTP_MAX_ATTEMPTS,
+} from "../lib/constants";
 import * as emailOtpRepository from "../repositories/emailOtp.repository";
 import { sendOtpCodeEmail } from "./email/email.service";
-
-const OTP_MAX_ATTEMPTS = 5;
 
 function otpTtlMs(): number {
   const t = ms(env.otpTtlMs as StringValue);
@@ -23,8 +27,8 @@ export function hashOtpCode(code: string): string {
 }
 
 function generateFourDigitCode(): string {
-  const n = crypto.randomInt(0, 10000);
-  return String(n).padStart(4, "0");
+  const n = crypto.randomInt(0, EMAIL_OTP_RANDOM_EXCLUSIVE_MAX);
+  return String(n).padStart(EMAIL_OTP_DIGIT_COUNT, "0");
 }
 
 function timingSafeEqualHex(a: string, b: string): boolean {
@@ -58,7 +62,7 @@ export async function sendOtp(params: {
   const expiresAt = new Date(Date.now() + otpTtlMs());
   await emailOtpRepository.createChallenge({ userId, purpose, codeHash, expiresAt });
 
-  const ttlMin = Math.max(1, Math.round(otpTtlMs() / 60_000));
+  const ttlMin = Math.max(1, Math.round(otpTtlMs() / MS_PER_MINUTE));
 
   try {
     await sendOtpCodeEmail({

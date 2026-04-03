@@ -1,6 +1,5 @@
 import type { ZodError } from "zod";
-
-const MAX_NAMES_IN_MESSAGE = 4;
+import { VALIDATION_MESSAGE_MAX_FIELD_NAMES } from "../constants";
 
 function uniqueTopLevelFieldNames(err: ZodError): string[] {
   const names = new Set<string>();
@@ -35,10 +34,10 @@ export function formatValidationMessage(err: ZodError): string {
   if (names.length === 0) {
     return "Some fields are missing or invalid.";
   }
-  if (names.length <= MAX_NAMES_IN_MESSAGE) {
+  if (names.length <= VALIDATION_MESSAGE_MAX_FIELD_NAMES) {
     return `${joinFieldNames(names)} ${names.length === 1 ? "is" : "are"} missing or invalid.`;
   }
-  const shown = names.slice(0, MAX_NAMES_IN_MESSAGE);
-  const rest = names.length - MAX_NAMES_IN_MESSAGE;
+  const shown = names.slice(0, VALIDATION_MESSAGE_MAX_FIELD_NAMES);
+  const rest = names.length - VALIDATION_MESSAGE_MAX_FIELD_NAMES;
   return `${joinFieldNames(shown)}, and ${rest} other field${rest === 1 ? "" : "s"} are missing or invalid.`;
 }

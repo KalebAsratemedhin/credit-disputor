@@ -2,7 +2,10 @@ openapi: 3.0.3
 info:
   title: Credit Disputor API
   version: 1.0.0
-  description: Backend API with health checks, email/password authentication, and optional Google sign-in (POST /auth/google).
+  description: |
+    Backend API with health checks, email/password authentication, optional Google sign-in (POST /auth/google),
+    and authenticated account APIs under `/v1` (profile, password, avatar, TOTP, backup codes, WebAuthn).
+    `GET /auth/me` remains available; `GET /v1/me` returns the same user shape including `avatarUrl`.
 
 servers:
   - url: http://localhost:3000
@@ -327,6 +330,7 @@ paths:
   /auth/me:
     get:
       summary: Current user (requires Bearer token)
+      description: Same `user` shape as `GET /v1/me` (includes `avatarUrl`).
       tags: [Auth]
       security:
         - bearerJwt: []
@@ -336,10 +340,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  user:
-                    $ref: "#/components/schemas/PublicUser"
+                $ref: "#/components/schemas/MeResponse"
         "401":
           description: Missing or invalid token
           content:
@@ -348,6 +349,444 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
         "404":
           description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/me:
+    get:
+      summary: Current user profile (Bearer)
+      tags: [Settings]
+      security:
+        - bearerJwt: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+    patch:
+      summary: Update profile (fullName and/or phoneNumber)
+      tags: [Settings]
+      security:
+        - bearerJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchMeRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/me/password:
+    post:
+      summary: Change password (invalidates refresh tokens)
+      tags: [Settings]
+      security:
+        - bearerJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkAckResponse"
+        "400":
+          description: Validation or business rule (e.g. current password required/wrong)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorBody"
+                  - $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/me/avatar:
+    post:
+      summary: Upload avatar image (multipart field `avatar`)
+      tags: [Settings]
+      security:
+        - bearerJwt: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [avatar]
+              properties:
+                avatar:
+                  type: string
+                  format: binary
+                  description: JPEG, PNG, or WebP (max 5 MiB)
+      responses:
+        "200":
+          description: OK — returns updated user and public avatar URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvatarUploadResponse"
+        "400":
+          description: |
+            Missing multipart file or validation failure: `AVATAR_REQUIRED` when the `avatar` part is absent.
+            Unsupported image MIME (e.g. SVG) → `INVALID_AVATAR_TYPE` with message listing JPEG, PNG, WebP.
+            File over size limit → Multer `FILE_TOO_LARGE`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/security/status:
+    get:
+      summary: MFA / WebAuthn summary for the current user
+      tags: [Security]
+      security:
+        - bearerJwt: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecurityStatusResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/security/totp/setup:
+    post:
+      summary: Start TOTP enrollment (returns otpauth URL and secret; not enabled until verify)
+      tags: [Security]
+      security:
+        - bearerJwt: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TotpSetupResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          description: TOTP already enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/security/totp/verify:
+    post:
+      summary: Confirm TOTP code and enable MFA (returns one-time backup codes)
+      tags: [Security]
+      security:
+        - bearerJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TotpVerifyRequest"
+      responses:
+        "200":
+          description: OK — save `backupCodes` securely; shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupCodesResponse"
+        "400":
+          description: Validation or invalid code
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorBody"
+                  - $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/security/totp:
+    delete:
+      summary: Disable TOTP and remove backup codes
+      tags: [Security]
+      security:
+        - bearerJwt: []
+      responses:
+        "204":
+          description: Disabled
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/security/backup-codes/regenerate:
+    post:
+      summary: Regenerate backup codes (requires TOTP enabled; invalidates previous codes)
+      tags: [Security]
+      security:
+        - bearerJwt: []
+      responses:
+        "200":
+          description: OK — save `backupCodes` securely; shown once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupCodesResponse"
+        "400":
+          description: TOTP not enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/security/webauthn/register/options:
+    post:
+      summary: Begin passkey registration (WebAuthn creation options)
+      tags: [Security]
+      security:
+        - bearerJwt: []
+      responses:
+        "200":
+          description: Pass to `@simplewebauthn/browser` startRegistration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebauthnRegistrationOptions"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/security/webauthn/register/verify:
+    post:
+      summary: Complete passkey registration with attestation response
+      tags: [Security]
+      security:
+        - bearerJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebauthnRegisterVerifyRequest"
+      responses:
+        "201":
+          description: Credential stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkAckResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/security/webauthn/credentials:
+    get:
+      summary: List registered passkeys (id, nickname, createdAt)
+      tags: [Security]
+      security:
+        - bearerJwt: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebauthnCredentialsListResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/security/webauthn/credentials/{id}:
+    delete:
+      summary: Remove a passkey by credential row id
+      tags: [Security]
+      security:
+        - bearerJwt: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Credential `id` from GET /v1/security/webauthn/credentials
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: Credential not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
           content:
             application/json:
               schema:
@@ -375,6 +814,10 @@ components:
         phoneNumber:
           type: string
           nullable: true
+        avatarUrl:
+          type: string
+          nullable: true
+          description: Absolute URL when set (from avatar upload)
         emailVerified:
           type: boolean
         createdAt:
@@ -383,7 +826,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, email, fullName, emailVerified, createdAt, updatedAt]
+      required: [id, email, fullName, avatarUrl, emailVerified, createdAt, updatedAt]
 
     SignupRequest:
       type: object
@@ -513,6 +956,128 @@ components:
         message:
           type: string
 
+    MeResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: "#/components/schemas/PublicUser"
+
+    PatchMeRequest:
+      type: object
+      description: At least one of fullName or phoneNumber is required.
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+        phoneNumber:
+          oneOf:
+            - type: string
+              minLength: 1
+            - type: "null"
+
+    ChangePasswordRequest:
+      type: object
+      required: [newPassword, confirmPassword]
+      properties:
+        currentPassword:
+          type: string
+          description: Required when the account has a password (omit for OAuth-only accounts if applicable).
+        newPassword:
+          type: string
+          minLength: 8
+        confirmPassword:
+          type: string
+
+    TotpVerifyRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: "^\\d{6}$"
+
+    WebauthnRegisterVerifyRequest:
+      type: object
+      required: [nickname, response]
+      properties:
+        nickname:
+          type: string
+          minLength: 1
+          maxLength: 120
+        response:
+          type: object
+          description: Registration response JSON from the browser WebAuthn API / @simplewebauthn/browser
+          additionalProperties: true
+
+    SecurityStatusResponse:
+      type: object
+      required: [totpEnabled, backupCodesRemaining, webauthnCredentialCount]
+      properties:
+        totpEnabled:
+          type: boolean
+        backupCodesRemaining:
+          type: integer
+          minimum: 0
+        webauthnCredentialCount:
+          type: integer
+          minimum: 0
+
+    TotpSetupResponse:
+      type: object
+      required: [otpauthUrl, secretBase32]
+      properties:
+        otpauthUrl:
+          type: string
+        secretBase32:
+          type: string
+
+    BackupCodesResponse:
+      type: object
+      required: [backupCodes]
+      properties:
+        backupCodes:
+          type: array
+          description: Eight-digit numeric codes (zero-padded), shown once
+          items:
+            type: string
+            pattern: "^\\d{8}$"
+
+    WebauthnCredentialSummary:
+      type: object
+      required: [id, nickname, createdAt]
+      properties:
+        id:
+          type: string
+        nickname:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    WebauthnCredentialsListResponse:
+      type: object
+      required: [credentials]
+      properties:
+        credentials:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebauthnCredentialSummary"
+
+    AvatarUploadResponse:
+      type: object
+      required: [user, avatarUrl]
+      properties:
+        user:
+          $ref: "#/components/schemas/PublicUser"
+        avatarUrl:
+          type: string
+
+    WebauthnRegistrationOptions:
+      type: object
+      description: PublicKeyCredentialCreationOptionsJSON shape from @simplewebauthn/server generateRegistrationOptions
+      additionalProperties: true
+
     ErrorBody:
       type: object
       properties:
@@ -541,3 +1106,7 @@ components:
 tags:
   - name: Health
   - name: Auth
+  - name: Settings
+    description: Authenticated profile, password, and avatar (`/v1/me`)
+  - name: Security
+    description: TOTP, backup codes, and WebAuthn passkeys (`/v1/security`)

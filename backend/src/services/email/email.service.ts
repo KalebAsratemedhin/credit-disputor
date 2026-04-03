@@ -11,6 +11,7 @@ import {
   passwordResetEmailTextLines,
 } from "../../lib/emails/passwordReset";
 import { env } from "../../config/env";
+import { EMAIL_PRIMARY_COLOR } from "../../lib/constants";
 import { getEmailSender } from "./getEmailSender";
 import type { RenderedEmail } from "./types";
 
@@ -36,8 +37,6 @@ function applyTemplate(template: string, vars: Record<string, string>): string {
   }
   return out;
 }
-
-const PRIMARY_COLOR = "#0093FF";
 
 function transactionalLogoMarkUrl(): string {
   const base = env.publicApiUrl;
@@ -68,7 +67,7 @@ function layoutTransactionalEmailHtml(mainHtml: string): string {
     <td align="center">
       <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
         <tr>
-          <td style="background-color:${PRIMARY_COLOR};padding:28px 32px;text-align:center;">
+          <td style="background-color:${EMAIL_PRIMARY_COLOR};padding:28px 32px;text-align:center;">
             <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto;">
               <tr>
                 <td style="padding-right:12px;vertical-align:middle;">
@@ -104,7 +103,7 @@ function renderOtpCodeEmail(p: OtpCodeEmailParams): RenderedEmail {
     firstName: escapeHtml(p.firstName),
     code: escapeHtml(p.code),
     expiresInMinutes: String(p.expiresInMinutes),
-    primaryColor: PRIMARY_COLOR,
+    primaryColor: EMAIL_PRIMARY_COLOR,
   });
   return { subject, text, html: layoutTransactionalEmailHtml(inner) };
 }
@@ -116,7 +115,7 @@ function renderPasswordResetEmail(p: PasswordResetEmailParams): RenderedEmail {
     firstName: escapeHtml(p.firstName),
     resetUrl: escapeHtmlAttr(p.resetUrl),
     expiresInMinutes: String(p.expiresInMinutes),
-    primaryColor: PRIMARY_COLOR,
+    primaryColor: EMAIL_PRIMARY_COLOR,
   });
   return { subject, text, html: layoutTransactionalEmailHtml(inner) };
 }

@@ -12,6 +12,10 @@ enum EmailOtpPurpose {
   SIGNIN
 }
 
+enum WebAuthnChallengeKind {
+  REGISTRATION
+}
+
 model User {
   id                   String                @id @default(cuid())
   email                String                @unique
@@ -19,12 +23,66 @@ model User {
   fullName             String
   phoneNumber          String?
   googleSub            String?               @unique
+  avatarUrl            String?
   emailVerified        Boolean               @default(false)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   refreshTokens        RefreshToken[]
   emailOtpChallenges   EmailOtpChallenge[]
   passwordResetTokens  PasswordResetToken[]
+  userTotp             UserTotp?
+  backupCodes          UserBackupCode[]
+  webauthnCredentials  WebAuthnCredential[]
+  webauthnChallenges   WebAuthnChallenge[]
+}
+
+model UserTotp {
+  userId    String    @id
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secretEnc String
+  enabled   Boolean   @default(false)
+  verifiedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model UserBackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  batchId   String
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([userId, batchId])
+}
+
+model WebAuthnCredential {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      BigInt   @default(0)
+  transports   String?
+  nickname     String
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model WebAuthnChallenge {
+  id        String                 @id @default(cuid())
+  userId    String
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge String
+  kind      WebAuthnChallengeKind
+  expiresAt DateTime
+  createdAt DateTime               @default(now())
+
+  @@index([userId, kind])
 }
 
 model RefreshToken {

@@ -44,12 +44,28 @@ const raw = cleanEnv(process.env, {
     default: "",
     desc: "Google OAuth client ID(s) for Sign in with Google; comma-separated if multiple",
   }),
+  TOTP_ENCRYPTION_KEY: str({
+    desc: "64 hex chars (32 bytes) for AES-256-GCM encryption of TOTP secrets at rest",
+  }),
+  WEBAUTHN_RP_ID: str({
+    default: "localhost",
+    desc: "WebAuthn relying party ID (hostname only, e.g. localhost or app.example.com)",
+  }),
+  WEBAUTHN_RP_NAME: str({ default: "Credit Disputor", desc: "WebAuthn RP display name" }),
+  WEBAUTHN_ORIGIN: str({
+    default: "http://localhost:5173",
+    desc: "Allowed WebAuthn origin(s); comma-separated (e.g. SPA URL)",
+  }),
 });
 
 const publicApiBase =
   raw.PUBLIC_API_URL.replace(/\/$/, "") || `http://localhost:${raw.PORT}`;
 
 const googleClientIds = raw.GOOGLE_CLIENT_ID.split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const webAuthnOrigins = raw.WEBAUTHN_ORIGIN.split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
@@ -74,4 +90,8 @@ export const env = {
   otpTtlMs: raw.OTP_TTL_MS,
   passwordResetTtlMs: raw.PASSWORD_RESET_TTL_MS,
   googleClientIds,
+  totpEncryptionKeyHex: raw.TOTP_ENCRYPTION_KEY,
+  webauthnRpId: raw.WEBAUTHN_RP_ID,
+  webauthnRpName: raw.WEBAUTHN_RP_NAME,
+  webauthnOrigins: webAuthnOrigins,
 };

@@ -105,3 +105,55 @@ export class GoogleAccountConflictError extends AppError {
     );
   }
 }
+
+export class CurrentPasswordIncorrectError extends AppError {
+  constructor() {
+    super("Current password is incorrect.", 401, "CURRENT_PASSWORD_INCORRECT");
+  }
+}
+
+export class CurrentPasswordRequiredError extends AppError {
+  constructor() {
+    super("Current password is required.", 400, "CURRENT_PASSWORD_REQUIRED");
+  }
+}
+
+export class TotpAlreadyEnabledError extends AppError {
+  constructor() {
+    super("Authenticator is already enabled. Remove it before enrolling again.", 409, "TOTP_ALREADY_ENABLED");
+  }
+}
+
+export class TotpNotConfiguredError extends AppError {
+  constructor() {
+    super("Authenticator is not set up.", 400, "TOTP_NOT_CONFIGURED");
+  }
+}
+
+export class InvalidTotpCodeError extends AppError {
+  constructor() {
+    super("Invalid authenticator code.", 400, "INVALID_TOTP_CODE");
+  }
+}
+
+export class WebAuthnVerificationError extends AppError {
+  constructor(message = "Security key registration failed.") {
+    super(message, 400, "WEBAUTHN_VERIFICATION_FAILED");
+  }
+}
+
+export class WebAuthnChallengeError extends AppError {
+  constructor() {
+    super("Security key challenge expired or missing. Start registration again.", 400, "WEBAUTHN_CHALLENGE_INVALID");
+  }
+}
+
+export class InvalidAvatarTypeError extends AppError {
+  constructor(reportedMimeType: string) {
+    super(
+      `Invalid image type (${reportedMimeType}). Allowed types: JPEG, PNG, WebP.`,
+      400,
+      "INVALID_AVATAR_TYPE"
+    );
+  }
+}

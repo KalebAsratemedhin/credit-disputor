@@ -5,6 +5,12 @@ backend/.env
 backend/.env.local
 *.log
 
+# Frontend (test SPA)
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+
 .cursor
 docs/
-# figma/
+figma/
+frontend/
