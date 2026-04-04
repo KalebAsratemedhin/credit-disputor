@@ -66,6 +66,15 @@ After **signup**, the API returns `{ user, verificationRequired: true }` and sen
 
 Use **`POST /auth/resend-email-verification`** (`email`) to resend the **signup** verification code. Legacy **`POST /auth/resend-otp`** is unchanged.
 
+### Phone verification (Twilio Verify)
+
+Signup stores **`phoneNumber`** as **E.164** (`TWILIO_PHONE_DEFAULT_REGION` helps parse national formats). **SMS is not sent at signup**; the user must be signed in first.
+
+- **`POST /v1/phone/send-verification`** (Bearer **`accessToken`**) — starts or restarts Twilio Verify SMS when `phoneVerified` is false and a phone is on file.
+- **`POST /v1/phone/verify`** (Bearer) — `{ code }` — returns `{ ok: true, user }` with **`phoneVerified: true`**. Does not issue new session tokens.
+- **`TWILIO_VERIFY_PROVIDER=console`** — logs instead of sending SMS; use code **`000000`** to verify locally.
+- Changing the number in **`PATCH /v1/me`** resets **`phoneVerified`** and sends SMS to the new number; the same v1 verify endpoints apply.
+
 Email **templates** live under `backend/src/lib/emails/`; escaping, branded HTML layout (header with logo, footer), and sending are handled in `backend/src/services/email/` (**Resend** or **console** via `email.service.ts`). Static assets for mail (e.g. [`backend/public/logo.jpg`](backend/public/logo.jpg)) are served at **`GET /public/...`** when the API is running.
 
 ### Password reset
@@ -77,7 +86,7 @@ Email **templates** live under `backend/src/lib/emails/`; escaping, branded HTML
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/auth/signup` | Register; returns pending verification + sends OTP |
+| `POST` | `/auth/signup` | Register; email OTP; phone saved as E.164, `phoneVerified` false until v1 phone verify |
 | `POST` | `/auth/signin` | Password check → `mfaToken` + `mfaMethods` |
 | `POST` | `/auth/signin/send-code` | Bearer `mfaToken` → emails sign-in OTP |
 | `POST` | `/auth/signin/resend-code` | Same as send-code |
@@ -93,6 +102,8 @@ Email **templates** live under `backend/src/lib/emails/`; escaping, branded HTML
 | `POST` | `/auth/reset-password` | Set new password with token from email |
 | `POST` | `/auth/refresh` | Rotate refresh token |
 | `GET` | `/auth/me` | Current user (Bearer access token) |
+| `POST` | `/v1/phone/send-verification` | Bearer — resend SMS for current user’s phone |
+| `POST` | `/v1/phone/verify` | Bearer + `{ code }` — set `phoneVerified` |
 
 After signup OTP verification, sign-in MFA verification, or Google sign-in, responses include `accessToken`, `refreshToken`, and `user`. Store refresh tokens securely; they are one-time rotatable.
 

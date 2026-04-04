@@ -10,6 +10,7 @@ function toPublicUser(user: User): PublicUser {
     phoneNumber: user.phoneNumber,
     avatarUrl: user.avatarUrl,
     emailVerified: user.emailVerified,
+    phoneVerified: user.phoneVerified,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -93,14 +94,28 @@ export async function updateProfile(
   userId: string,
   data: { fullName?: string; phoneNumber?: string | null }
 ): Promise<PublicUser> {
+  const existing = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+
+  const phoneChanged =
+    data.phoneNumber !== undefined && data.phoneNumber !== existing.phoneNumber;
+  const clearingPhone = data.phoneNumber === null;
+
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
       ...(data.fullName !== undefined ? { fullName: data.fullName } : {}),
       ...(data.phoneNumber !== undefined ? { phoneNumber: data.phoneNumber } : {}),
+      ...((phoneChanged || clearingPhone) ? { phoneVerified: false } : {}),
     },
   });
   return toPublicUser(user);
+}
+
+export async function setPhoneVerified(userId: string, verified: boolean): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { phoneVerified: verified },
+  });
 }
 
 export async function updateAvatarUrl(userId: string, avatarUrl: string | null): Promise<PublicUser> {

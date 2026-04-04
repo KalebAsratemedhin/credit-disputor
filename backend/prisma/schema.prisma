@@ -26,6 +26,7 @@ model User {
   googleSub            String?               @unique
   avatarUrl            String?
   emailVerified        Boolean               @default(false)
+  phoneVerified        Boolean               @default(false)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   refreshTokens        RefreshToken[]

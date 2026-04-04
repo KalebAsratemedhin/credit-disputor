@@ -183,3 +183,27 @@ export class InvalidMfaBackupCodeError extends AppError {
     super("Invalid backup code.", 400, "INVALID_MFA_BACKUP_CODE");
   }
 }
+
+export class InvalidPhoneNumberError extends AppError {
+  constructor() {
+    super("Invalid phone number. Use a valid number in international format (e.g. +1…).", 400, "INVALID_PHONE_NUMBER");
+  }
+}
+
+export class PhoneVerificationFailedError extends AppError {
+  constructor() {
+    super("Invalid or expired phone verification code.", 400, "PHONE_VERIFICATION_FAILED");
+  }
+}
+
+export class TwilioVerifyNotConfiguredError extends AppError {
+  constructor() {
+    super("SMS verification is not configured on this server.", 503, "TWILIO_VERIFY_NOT_CONFIGURED");
+  }
+}
+
+export class PhoneVerificationSendError extends AppError {
+  constructor() {
+    super("Could not send SMS verification. Try again later.", 503, "PHONE_VERIFICATION_SEND_FAILED");
+  }
+}

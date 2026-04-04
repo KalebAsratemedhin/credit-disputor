@@ -1,8 +1,13 @@
 import { z } from "zod";
+import {
+  PASSWORD_MIN_LENGTH,
+  PHONE_VERIFICATION_CODE_MAX_LENGTH,
+  PHONE_VERIFICATION_CODE_MIN_LENGTH,
+} from "../constants";
 
 export const signupBodySchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string().min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`),
   fullName: z.string().min(1, "fullName is required"),
   phoneNumber: z.string().min(1, "phoneNumber is required"),
 });
@@ -43,6 +48,14 @@ export const resendEmailVerificationBodySchema = z.object({
   email: z.string().email(),
 });
 
+export const verifyPhoneCodeOnlyBodySchema = z.object({
+  code: z
+    .string()
+    .min(PHONE_VERIFICATION_CODE_MIN_LENGTH, "code is too short")
+    .max(PHONE_VERIFICATION_CODE_MAX_LENGTH, "code is too long")
+    .regex(/^\d+$/, "code must be numeric"),
+});
+
 export const signinWebauthnVerifyBodySchema = z
   .object({
     id: z.string().min(1),
@@ -66,7 +79,7 @@ export const forgotPasswordBodySchema = z.object({
 export const resetPasswordBodySchema = z
   .object({
     token: z.string().min(1, "token is required"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+    password: z.string().min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`),
     confirmPassword: z.string().min(1, "confirmPassword is required"),
   })
   .refine((d) => d.password === d.confirmPassword, {

@@ -20,6 +20,7 @@ import { encryptUtf8, decryptUtf8, parseTotpEncryptionKey } from "../lib/crypto/
 import {
   CurrentPasswordIncorrectError,
   CurrentPasswordRequiredError,
+  InvalidPhoneNumberError,
   InvalidTotpCodeError,
   NotFoundError,
   TotpAlreadyEnabledError,
@@ -34,10 +35,13 @@ import * as refreshTokenRepository from "../repositories/refreshToken.repository
 import * as totpRepository from "../repositories/totp.repository";
 import * as userRepository from "../repositories/user.repository";
 import * as webauthnRepository from "../repositories/webauthn.repository";
+import { toE164 } from "../lib/phone";
+import { logger } from "../lib/logger";
 import {
   changePasswordBodySchema,
   patchProfileBodySchema,
 } from "../lib/validation/settings.schemas";
+import * as twilioVerifyService from "./twilioVerify.service";
 
 let totpKeyCache: Buffer | null = null;
 
@@ -94,7 +98,45 @@ export async function patchProfile(userId: string, rawBody: unknown): Promise<Pu
 
   const { fullName, phoneNumber } = parsed.data;
 
-  return userRepository.updateProfile(userId, { fullName, phoneNumber });
+  const before = await userRepository.findUserRecordById(userId);
+  if (!before) {
+    throw new NotFoundError("User");
+  }
+
+  let normalizedPhone: string | null | undefined;
+  if (phoneNumber !== undefined) {
+    if (phoneNumber === null) {
+      normalizedPhone = null;
+    } else {
+      const e164 = toE164(phoneNumber);
+      if (!e164) {
+        throw new InvalidPhoneNumberError();
+      }
+      normalizedPhone = e164;
+    }
+  }
+
+  const user = await userRepository.updateProfile(userId, {
+    fullName,
+    phoneNumber: normalizedPhone === undefined ? undefined : normalizedPhone,
+  });
+
+  if (
+    normalizedPhone !== undefined &&
+    normalizedPhone !== null &&
+    before.phoneNumber !== user.phoneNumber
+  ) {
+    try {
+      await twilioVerifyService.startPhoneVerification(normalizedPhone);
+    } catch (e) {
+      logger.error(
+        e instanceof Error ? { err: e.message } : { err: e },
+        "Failed to send phone verification SMS after profile update"
+      );
+    }
+  }
+
+  return user;
 }
 
 export async function setAvatarUrl(userId: string, avatarUrl: string | null): Promise<PublicUser> {

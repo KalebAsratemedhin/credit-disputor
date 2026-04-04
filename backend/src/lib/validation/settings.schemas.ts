@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { PASSWORD_MIN_LENGTH } from "../constants";
 
 export const changePasswordBodySchema = z
   .object({
     currentPassword: z.string().optional(),
-    newPassword: z.string().min(8, "Password must be at least 8 characters"),
+    newPassword: z.string().min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`),
     confirmPassword: z.string().min(1, "confirmPassword is required"),
   })
   .refine((d) => d.newPassword === d.confirmPassword, {

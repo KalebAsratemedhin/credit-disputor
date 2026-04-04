@@ -49,6 +49,22 @@ export const resendOtpLimiter = rateLimit({
   message: { message: "Too many resend requests. Try again later.", code: "RATE_LIMITED" },
 });
 
+export const phoneVerificationSendLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS.FIFTEEN_MINUTES,
+  max: RATE_LIMIT_MAX_REQUESTS.PHONE_VERIFY_SEND,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many SMS verification requests. Try again later.", code: "RATE_LIMITED" },
+});
+
+export const phoneVerificationCheckLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS.FIFTEEN_MINUTES,
+  max: RATE_LIMIT_MAX_REQUESTS.PHONE_VERIFY_CHECK,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many verification attempts. Try again later.", code: "RATE_LIMITED" },
+});
+
 export const signinMfaSendLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS.FIFTEEN_MINUTES,
   max: RATE_LIMIT_MAX_REQUESTS.SIGNIN_MFA_SEND,

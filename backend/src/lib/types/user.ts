@@ -5,6 +5,7 @@ export type PublicUser = {
   phoneNumber: string | null;
   avatarUrl: string | null;
   emailVerified: boolean;
+  phoneVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
 };

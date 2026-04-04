@@ -13,6 +13,7 @@ import {
   GoogleSignInNotConfiguredError,
   InvalidCredentialsError,
   InvalidGoogleIdTokenError,
+  InvalidPhoneNumberError,
   InvalidRefreshTokenError,
   NotFoundError,
   ResetTokenInvalidError,
@@ -26,6 +27,7 @@ import * as refreshTokenRepository from "../repositories/refreshToken.repository
 import * as totpRepository from "../repositories/totp.repository";
 import * as userRepository from "../repositories/user.repository";
 import * as webauthnRepository from "../repositories/webauthn.repository";
+import { maskE164 } from "../lib/logPrivacy";
 import { maskEmail } from "../lib/mfa/maskEmail";
 import { signMfaToken } from "../lib/mfa/mfaToken";
 import { verifyAndConsumeBackupCodeForUser } from "../lib/mfa/verifyBackupForUser";
@@ -42,6 +44,7 @@ import {
   signupBodySchema,
   verifyEmailBodySchema,
   verifyOtpBodySchema,
+  verifyPhoneCodeOnlyBodySchema,
 } from "../lib/validation/auth.schemas";
 import type { PublicUser } from "../lib/types/user";
 import { sendPasswordResetEmail } from "./email/email.service";
@@ -52,7 +55,9 @@ import {
   MS_PER_MINUTE,
   RESET_PASSWORD_SUCCESS_MESSAGE,
 } from "../lib/constants";
+import { toE164 } from "../lib/phone";
 import * as otpService from "./otp.service";
+import * as twilioVerifyService from "./twilioVerify.service";
 
 const googleOAuthClient = new OAuth2Client();
 
@@ -106,6 +111,10 @@ async function buildMfaMethods(userId: string): Promise<MfaMethods> {
 
 function readEmailVerified(userRecord: unknown): boolean {
   return (userRecord as { emailVerified?: boolean } | null | undefined)?.emailVerified ?? false;
+}
+
+function readPhoneVerified(userRecord: unknown): boolean {
+  return (userRecord as { phoneVerified?: boolean } | null | undefined)?.phoneVerified ?? false;
 }
 
 function hashRefreshToken(raw: string): string {
@@ -208,11 +217,16 @@ export async function signup(rawBody: unknown): Promise<SignupPendingResponse> {
   if (!parsed.success) {
     throw new ValidationAppError(parsed.error);
   }
-  const { email, password, fullName, phoneNumber } = parsed.data;
+  const { email, password, fullName, phoneNumber: rawPhone } = parsed.data;
 
   const existing = await userRepository.findUserByEmail(email);
   if (existing) {
     throw new EmailTakenError();
+  }
+
+  const phoneE164 = toE164(rawPhone);
+  if (!phoneE164) {
+    throw new InvalidPhoneNumberError();
   }
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
@@ -222,7 +236,7 @@ export async function signup(rawBody: unknown): Promise<SignupPendingResponse> {
       email,
       passwordHash,
       fullName,
-      phoneNumber,
+      phoneNumber: phoneE164,
     });
     await otpService.sendOtp({
       userId: user.id,
@@ -476,6 +490,77 @@ export async function resendEmailVerification(rawBody: unknown): Promise<{ ok: t
     throw new ValidationAppError(parsed.error);
   }
   return resendSignupVerificationEmail(parsed.data.email);
+}
+
+export async function sendPhoneVerificationForUser(userId: string): Promise<{ ok: true }> {
+  const userRecord = await userRepository.findUserRecordById(userId);
+  if (!userRecord) {
+    logger.warn({ userId }, "sendPhoneVerificationForUser: user not found");
+    throw new NotFoundError("User");
+  }
+  const phoneVerified = readPhoneVerified(userRecord);
+  const hasPhone = Boolean(userRecord.phoneNumber);
+  logger.info(
+    {
+      userId,
+      hasPhone,
+      phoneVerified,
+      phoneMasked: userRecord.phoneNumber ? maskE164(userRecord.phoneNumber) : null,
+    },
+    "sendPhoneVerificationForUser: user record state"
+  );
+  if (!userRecord.phoneNumber || phoneVerified) {
+    logger.info(
+      { userId, reason: !userRecord.phoneNumber ? "no_phone_on_profile" : "already_verified" },
+      "sendPhoneVerificationForUser: skipping Twilio (early return 200 ok)"
+    );
+    return { ok: true };
+  }
+  logger.info(
+    { userId, phoneMasked: maskE164(userRecord.phoneNumber) },
+    "sendPhoneVerificationForUser: calling Twilio startPhoneVerification"
+  );
+  await twilioVerifyService.startPhoneVerification(userRecord.phoneNumber);
+  logger.info({ userId }, "sendPhoneVerificationForUser: Twilio start completed");
+  return { ok: true };
+}
+
+export async function verifyPhoneForUser(userId: string, rawBody: unknown): Promise<{ ok: true; user: PublicUser }> {
+  const parsed = verifyPhoneCodeOnlyBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new ValidationAppError(parsed.error);
+  }
+  const userRecord = await userRepository.findUserRecordById(userId);
+  if (!userRecord || !userRecord.phoneNumber) {
+    logger.warn({ userId, hasRecord: Boolean(userRecord) }, "verifyPhoneForUser: user or phone missing");
+    throw new NotFoundError("User");
+  }
+  const phoneVerified = readPhoneVerified(userRecord);
+  logger.info(
+    {
+      userId,
+      phoneVerified,
+      phoneMasked: maskE164(userRecord.phoneNumber),
+    },
+    "verifyPhoneForUser: user record state"
+  );
+  if (phoneVerified) {
+    const user = await userRepository.findUserById(userId);
+    if (!user) {
+      throw new NotFoundError("User");
+    }
+    logger.info({ userId }, "verifyPhoneForUser: already verified, returning user");
+    return { ok: true, user };
+  }
+  logger.info({ userId, phoneMasked: maskE164(userRecord.phoneNumber) }, "verifyPhoneForUser: calling Twilio check");
+  await twilioVerifyService.checkPhoneVerification(userRecord.phoneNumber, parsed.data.code);
+  await userRepository.setPhoneVerified(userId, true);
+  const user = await userRepository.findUserById(userId);
+  if (!user) {
+    throw new NotFoundError("User");
+  }
+  logger.info({ userId }, "verifyPhoneForUser: phone marked verified");
+  return { ok: true, user };
 }
 
 export async function refresh(rawBody: unknown): Promise<AuthResponse> {

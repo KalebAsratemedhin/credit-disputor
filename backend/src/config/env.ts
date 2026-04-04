@@ -60,6 +60,18 @@ const raw = cleanEnv(process.env, {
     default: "http://localhost:5173",
     desc: "Allowed WebAuthn origin(s); comma-separated (e.g. SPA URL)",
   }),
+  TWILIO_VERIFY_PROVIDER: str({
+    choices: ["twilio", "console"],
+    default: "console",
+    desc: "console logs SMS; twilio uses Verify API",
+  }),
+  TWILIO_ACCOUNT_SID: str({ default: "" }),
+  TWILIO_AUTH_TOKEN: str({ default: "" }),
+  TWILIO_VERIFY_SERVICE_SID: str({ default: "", desc: "Verify v2 Service SID (VA…)" }),
+  TWILIO_PHONE_DEFAULT_REGION: str({
+    default: "US",
+    desc: "Default country for parsing national phone numbers at signup/profile",
+  }),
 });
 
 const publicApiBase =
@@ -99,4 +111,9 @@ export const env = {
   webauthnRpId: raw.WEBAUTHN_RP_ID,
   webauthnRpName: raw.WEBAUTHN_RP_NAME,
   webauthnOrigins: webAuthnOrigins,
+  twilioVerifyProvider: raw.TWILIO_VERIFY_PROVIDER as "twilio" | "console",
+  twilioAccountSid: raw.TWILIO_ACCOUNT_SID,
+  twilioAuthToken: raw.TWILIO_AUTH_TOKEN,
+  twilioVerifyServiceSid: raw.TWILIO_VERIFY_SERVICE_SID,
+  twilioPhoneDefaultRegion: raw.TWILIO_PHONE_DEFAULT_REGION,
 };

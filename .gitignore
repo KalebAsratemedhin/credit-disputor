@@ -12,5 +12,5 @@ frontend/.env.local
 
 .cursor
 docs/
-# figma/
+figma/
 frontend/

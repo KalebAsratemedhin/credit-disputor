@@ -4,8 +4,8 @@ info:
   version: 1.0.0
   description: |
     Backend API with health checks, email/password sign-in (password then MFA via `mfaToken`: email OTP, TOTP, backup code, or WebAuthn passkey),
-    optional Google sign-in (POST /auth/google, tokens without MFA), and authenticated `/v1` APIs
-    (profile, password, avatar, preferences, TOTP, backup codes, WebAuthn).
+    optional Google sign-in (POST /auth/google, tokens without MFA), SMS phone verification via Twilio Verify,
+    and authenticated `/v1` APIs (profile, password, avatar, preferences, phone verify, TOTP, backup codes, WebAuthn).
     `GET /auth/me` and `GET /v1/me` return the same user shape including `avatarUrl`.
 
 servers:
@@ -66,13 +66,16 @@ paths:
               $ref: "#/components/schemas/SignupRequest"
       responses:
         "201":
-          description: Created — verify email with OTP; tokens are returned from POST /auth/verify-email (or legacy POST /auth/verify-otp)
+          description: |
+            Created — sends email OTP; phone is stored as E.164 with `phoneVerified: false`.
+            After `POST /auth/verify-email` (session tokens), complete phone verification with Bearer auth:
+            `POST /v1/phone/send-verification` then `POST /v1/phone/verify`.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/SignupPendingResponse"
         "400":
-          description: Validation error
+          description: Validation error (including invalid phone number)
           content:
             application/json:
               schema:
@@ -660,6 +663,7 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
     patch:
       summary: Update profile (fullName and/or phoneNumber)
+      description: Changing `phoneNumber` normalizes to E.164, sets `phoneVerified` to false, and sends a new SMS verification when Twilio is enabled.
       tags: [Settings]
       security:
         - bearerJwt: []
@@ -696,6 +700,93 @@ paths:
                 $ref: "#/components/schemas/ErrorBody"
         "429":
           description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/phone/send-verification:
+    post:
+      summary: Start or resend SMS phone verification (Bearer)
+      description: |
+        Requires session **`accessToken`**. Use after signup/email verify or when `phoneVerified` is false.
+        No-op if already verified or no phone. `TWILIO_VERIFY_PROVIDER=console` accepts code **000000**.
+      tags: [Settings]
+      security:
+        - bearerJwt: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkAckResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "503":
+          description: Twilio not configured or send failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/phone/verify:
+    post:
+      summary: Verify phone with SMS code (Bearer)
+      tags: [Settings]
+      security:
+        - bearerJwt: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyPhoneCodeOnlyRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyPhoneResponse"
+        "400":
+          description: Validation or invalid code
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ValidationErrorBody"
+                  - $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: User not found or no phone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Too many attempts
           content:
             application/json:
               schema:
@@ -1174,13 +1265,15 @@ components:
           description: Absolute URL when set (from avatar upload)
         emailVerified:
           type: boolean
+        phoneVerified:
+          type: boolean
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-      required: [id, email, fullName, avatarUrl, emailVerified, createdAt, updatedAt]
+      required: [id, email, fullName, avatarUrl, emailVerified, phoneVerified, createdAt, updatedAt]
 
     SignupRequest:
       type: object
@@ -1196,6 +1289,24 @@ components:
           type: string
         phoneNumber:
           type: string
+          description: Parsed with default region from env; stored as E.164 when valid
+
+    VerifyPhoneCodeOnlyRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+
+    VerifyPhoneResponse:
+      type: object
+      required: [ok, user]
+      properties:
+        ok:
+          type: boolean
+          enum: [true]
+        user:
+          $ref: "#/components/schemas/PublicUser"
 
     SigninRequest:
       type: object
