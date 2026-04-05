@@ -78,24 +78,6 @@ export async function postResendEmailVerification(
   }
 }
 
-export async function postVerifyOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const result = await authService.verifyOtp(req.body);
-    res.status(200).json(result);
-  } catch (e) {
-    next(e);
-  }
-}
-
-export async function postResendOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const result = await authService.resendOtp(req.body);
-    res.status(200).json(result);
-  } catch (e) {
-    next(e);
-  }
-}
-
 export async function postSigninWebauthnAuthenticationOptions(
   req: Request,
   res: Response,

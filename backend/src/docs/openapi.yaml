@@ -419,7 +419,7 @@ paths:
   /auth/resend-email-verification:
     post:
       summary: Resend signup email verification code
-      description: Same behavior as legacy **`POST /auth/resend-otp`**; does not resend sign-in MFA codes.
+      description: Resends the signup email verification code; does not resend sign-in MFA codes.
       tags: [Auth]
       requestBody:
         required: true
@@ -427,76 +427,6 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ResendEmailVerificationRequest"
-      responses:
-        "200":
-          description: Always OK (no enumeration)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OkAckResponse"
-        "400":
-          description: Validation error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ValidationErrorBody"
-        "429":
-          description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-
-  /auth/verify-otp:
-    post:
-      deprecated: true
-      summary: "[Deprecated] Verify signup email OTP — use POST /auth/verify-email"
-      tags: [Auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/VerifyOtpRequest"
-      responses:
-        "200":
-          description: OK — session tokens issued
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AuthResponse"
-        "400":
-          description: Validation or invalid OTP
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - $ref: "#/components/schemas/ValidationErrorBody"
-                  - $ref: "#/components/schemas/ErrorBody"
-        "401":
-          description: Unknown user (generic)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-        "429":
-          description: Too many attempts
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-
-  /auth/resend-otp:
-    post:
-      deprecated: true
-      summary: "[Deprecated] Resend signup verification — use POST /auth/resend-email-verification"
-      tags: [Auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ResendOtpRequest"
       responses:
         "200":
           description: Always OK (no enumeration)
@@ -907,6 +837,9 @@ paths:
         - bearerJwt: []
       requestBody:
         required: true
+        description: |
+          **Required:** multipart field `avatar` (file). **Optional:** none.
+          Accepted types: JPEG, PNG, WebP. Max size 5 MiB.
         content:
           multipart/form-data:
             schema:
@@ -916,7 +849,7 @@ paths:
                 avatar:
                   type: string
                   format: binary
-                  description: JPEG, PNG, or WebP (max 5 MiB)
+                  description: Image file (JPEG, PNG, or WebP; max 5 MiB).
       responses:
         "200":
           description: OK — returns updated user and public avatar URL
@@ -1200,7 +1133,8 @@ paths:
           required: true
           schema:
             type: string
-          description: Credential `id` from GET /v1/security/webauthn/credentials
+          description: |
+            **Required.** Passkey row id from `GET /v1/security/webauthn/credentials` (`credentials[].id`).
       responses:
         "204":
           description: Deleted
@@ -1248,21 +1182,25 @@ components:
   schemas:
     PublicUser:
       type: object
+      description: User profile fields returned by auth and `/v1/me` endpoints.
       properties:
         id:
           type: string
+          description: User id (cuid).
         email:
           type: string
           format: email
         fullName:
           type: string
+          description: Display name.
         phoneNumber:
           type: string
           nullable: true
+          description: E.164 when set.
         avatarUrl:
           type: string
           nullable: true
-          description: Absolute URL when set (from avatar upload)
+          description: Absolute URL when set (from avatar upload).
         emailVerified:
           type: boolean
         phoneVerified:
@@ -1277,26 +1215,33 @@ components:
 
     SignupRequest:
       type: object
+      description: |
+        **Required:** `email`, `password`, `fullName`, `phoneNumber`. Creates an unverified account and sends a signup email code.
       required: [email, password, fullName, phoneNumber]
       properties:
         email:
           type: string
           format: email
+          description: Account email (must not already be registered).
         password:
           type: string
-          minLength: 8
+          description: Minimum 8 characters.
         fullName:
           type: string
+          description: Non-empty display name.
         phoneNumber:
           type: string
-          description: Parsed with default region from env; stored as E.164 when valid
+          description: Parsed with server default region; stored as E.164 when valid.
 
     VerifyPhoneCodeOnlyRequest:
       type: object
+      description: |
+        **Required:** `code`. Digits-only SMS code from Twilio Verify (length depends on provider; dev console accepts `000000`).
       required: [code]
       properties:
         code:
           type: string
+          description: Numeric verification code from SMS.
 
     VerifyPhoneResponse:
       type: object
@@ -1310,6 +1255,8 @@ components:
 
     SigninRequest:
       type: object
+      description: |
+        **Required:** `email`, `password`. Returns MFA step-up (`mfaToken`); not session tokens until MFA completes.
       required: [email, password]
       properties:
         email:
@@ -1317,32 +1264,41 @@ components:
           format: email
         password:
           type: string
+          description: Account password.
 
     GoogleSignInRequest:
       type: object
+      description: |
+        **Required:** `idToken`. One-step sign-in; no post-login MFA (unlike email/password).
       required: [idToken]
       properties:
         idToken:
           type: string
-          description: JWT credential from Google Identity Services (GIS)
+          description: ID token (JWT) from Google Identity Services after GIS sign-in.
 
     RefreshRequest:
       type: object
+      description: |
+        **Required:** `refreshToken` from a prior `AuthResponse`.
       required: [refreshToken]
       properties:
         refreshToken:
           type: string
+          description: Opaque refresh token issued with the last access token.
 
     AuthResponse:
       type: object
+      description: Session issued after successful auth (signup verify, MFA verify, Google, or refresh).
       required: [user, accessToken, refreshToken]
       properties:
         user:
           $ref: "#/components/schemas/PublicUser"
         accessToken:
           type: string
+          description: JWT for **bearerJwt** on protected routes.
         refreshToken:
           type: string
+          description: Opaque token for `POST /auth/refresh`.
 
     SigninMfaRequiredResponse:
       type: object
@@ -1379,14 +1335,18 @@ components:
 
     SigninMfaVerifyRequest:
       type: object
+      description: |
+        **Required:** `kind`, `code`. Requires `Authorization: Bearer <mfaToken>` from `POST /auth/signin` (see **mfaBearer**).
       required: [kind, code]
       properties:
         kind:
           type: string
           enum: [email_otp, totp, backup_code]
+          description: |
+            MFA channel: `email_otp` (email code), `totp` (authenticator app), `backup_code` (one-time backup code).
         code:
           type: string
-          description: Four-digit email OTP, authenticator code, or eight-digit backup code
+          description: Code for the selected `kind` (email OTP, TOTP, or backup code format per server).
 
     SignupPendingResponse:
       type: object
@@ -1400,75 +1360,71 @@ components:
 
     VerifyEmailRequest:
       type: object
+      description: |
+        **Required:** `email`, `code`. Confirms signup using the code emailed after `POST /auth/signup`.
       required: [email, code]
       properties:
         email:
           type: string
           format: email
+          description: Same email used at signup.
         code:
           type: string
-          pattern: "^\\d{4}$"
+          description: 4-digit code from the signup verification email.
 
     ResendEmailVerificationRequest:
       type: object
+      description: |
+        **Required:** `email`. Resends signup verification email (always 200; no account enumeration).
       required: [email]
       properties:
         email:
           type: string
           format: email
+          description: Email that may have a pending signup.
 
     WebAuthnAuthenticationVerifyRequest:
       type: object
+      description: |
+        **Required:** `id`, `rawId`, `type`, `response`. Browser `AuthenticationResponseJSON` after `startAuthentication()`.
+        Extra properties allowed (passthrough). Requires **mfaBearer**.
       required: [id, rawId, type, response]
       properties:
         id:
           type: string
+          description: Credential id (base64url).
         rawId:
           type: string
+          description: Raw credential id (base64url).
         type:
           type: string
           enum: [public-key]
+          description: Must be `public-key`.
         response:
           type: object
+          description: Authenticator assertion payload from the browser.
           required: [clientDataJSON, authenticatorData, signature]
           properties:
             clientDataJSON:
               type: string
+              description: |
+                Required in `response`. Client data JSON (base64url).
             authenticatorData:
               type: string
+              description: |
+                Required in `response`. Authenticator data (base64url).
             signature:
               type: string
+              description: |
+                Required in `response`. Assertion signature (base64url).
             userHandle:
               type: string
+              description: Optional. User handle if returned by the authenticator.
         clientExtensionResults:
           type: object
+          description: Optional. Extension results from the browser.
           additionalProperties: true
       additionalProperties: true
-
-    VerifyOtpRequest:
-      type: object
-      required: [email, code, purpose]
-      properties:
-        email:
-          type: string
-          format: email
-        code:
-          type: string
-          pattern: "^\\d{4}$"
-        purpose:
-          type: string
-          enum: [signup_verify]
-
-    ResendOtpRequest:
-      type: object
-      required: [email, purpose]
-      properties:
-        email:
-          type: string
-          format: email
-        purpose:
-          type: string
-          enum: [signup_verify]
 
     OkAckResponse:
       type: object
@@ -1480,11 +1436,14 @@ components:
 
     ForgotPasswordRequest:
       type: object
+      description: |
+        **Required:** `email`. Triggers reset email if an account exists (response does not reveal whether email exists).
       required: [email]
       properties:
         email:
           type: string
           format: email
+          description: Account email to send reset instructions to.
 
     ForgotPasswordResponse:
       type: object
@@ -1495,15 +1454,19 @@ components:
 
     ResetPasswordRequest:
       type: object
+      description: |
+        **Required:** `token`, `password`, `confirmPassword`. `password` and `confirmPassword` must match; minimum password length 8.
       required: [token, password, confirmPassword]
       properties:
         token:
           type: string
+          description: Opaque token from the password-reset email link.
         password:
           type: string
-          minLength: 8
+          description: New password (min 8 characters).
         confirmPassword:
           type: string
+          description: Must match `password`.
 
     ResetPasswordSuccessResponse:
       type: object
@@ -1514,6 +1477,8 @@ components:
 
     MeResponse:
       type: object
+      description: |
+        Top-level **required** field: `user`. Same profile shape for `GET /auth/me` and `GET /v1/me`.
       required: [user]
       properties:
         user:
@@ -1521,49 +1486,57 @@ components:
 
     PatchMeRequest:
       type: object
-      description: At least one of fullName or phoneNumber is required.
+      description: |
+        **At least one of** `fullName` or `phoneNumber` must be sent. Both fields are optional individually; omitting both is invalid.
+        Sending a new `phoneNumber` re-verifies phone (SMS) when Twilio is enabled.
       properties:
         fullName:
           type: string
-          minLength: 1
+          description: Optional. New display name (non-empty when provided).
         phoneNumber:
-          oneOf:
-            - type: string
-              minLength: 1
-            - type: "null"
+          nullable: true
+          type: string
+          description: Optional. New phone (parsed to E.164) or `null` to clear.
 
     ChangePasswordRequest:
       type: object
+      description: |
+        **Required:** `newPassword`, `confirmPassword` (must match each other, min 8 characters).
+        **Optional:** `currentPassword` — required when the user has a password; omit for OAuth-only accounts where applicable.
       required: [newPassword, confirmPassword]
       properties:
         currentPassword:
           type: string
-          description: Required when the account has a password (omit for OAuth-only accounts if applicable).
+          description: Optional. Current password when the account has one.
         newPassword:
           type: string
-          minLength: 8
+          description: New password (min 8 characters).
         confirmPassword:
           type: string
+          description: Must match `newPassword`.
 
     TotpVerifyRequest:
       type: object
+      description: |
+        **Required:** `code`. Completes TOTP enrollment after `POST /v1/security/totp/setup`.
       required: [code]
       properties:
         code:
           type: string
-          pattern: "^\\d{6}$"
+          description: 6-digit TOTP code from the authenticator app.
 
     WebauthnRegisterVerifyRequest:
       type: object
+      description: |
+        **Required:** `nickname`, `response`. `response` is the browser registration JSON after `startRegistration()`.
       required: [nickname, response]
       properties:
         nickname:
           type: string
-          minLength: 1
-          maxLength: 120
+          description: User-visible label for this passkey (1–120 characters).
         response:
           type: object
-          description: Registration response JSON from the browser WebAuthn API / @simplewebauthn/browser
+          description: Registration response JSON from `@simplewebauthn/browser` / Web API.
           additionalProperties: true
 
     SecurityStatusResponse:
@@ -1594,10 +1567,10 @@ components:
       properties:
         backupCodes:
           type: array
-          description: Eight-digit numeric codes (zero-padded), shown once
+          description: One-time backup codes (eight digits each), shown once — store securely.
           items:
             type: string
-            pattern: "^\\d{8}$"
+            description: Eight-digit numeric code.
 
     WebauthnCredentialSummary:
       type: object
@@ -1673,8 +1646,9 @@ components:
       additionalProperties:
         type: boolean
       description: |
+        Map of preference **key → boolean**. **Required:** at least one key.
+        Keys must be valid slugs from the catalog returned by `GET /v1/me/preferences` (unknown keys are rejected).
         Example: `{ "emailMarketing": false, "pushBrowserNotifications": true }`.
-        Keys must be listed in the server preference catalog.
 
     WebauthnRegistrationOptions:
       type: object

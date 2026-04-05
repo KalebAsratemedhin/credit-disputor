@@ -36,14 +36,12 @@ import {
   forgotPasswordBodySchema,
   refreshBodySchema,
   resendEmailVerificationBodySchema,
-  resendOtpBodySchema,
   resetPasswordBodySchema,
   googleSignInBodySchema,
   signinBodySchema,
   signinMfaVerifyBodySchema,
   signupBodySchema,
   verifyEmailBodySchema,
-  verifyOtpBodySchema,
   verifyPhoneCodeOnlyBodySchema,
 } from "../lib/validation/auth.schemas";
 import type { PublicUser } from "../lib/types/user";
@@ -458,15 +456,6 @@ async function resendSignupVerificationEmail(email: string): Promise<{ ok: true 
   return { ok: true };
 }
 
-export async function verifyOtp(rawBody: unknown): Promise<AuthResponse> {
-  const parsed = verifyOtpBodySchema.safeParse(rawBody);
-  if (!parsed.success) {
-    throw new ValidationAppError(parsed.error);
-  }
-  const { email, code } = parsed.data;
-  return verifySignupEmailWithCode(email, code);
-}
-
 export async function verifyEmail(rawBody: unknown): Promise<AuthResponse> {
   const parsed = verifyEmailBodySchema.safeParse(rawBody);
   if (!parsed.success) {
@@ -474,14 +463,6 @@ export async function verifyEmail(rawBody: unknown): Promise<AuthResponse> {
   }
   const { email, code } = parsed.data;
   return verifySignupEmailWithCode(email, code);
-}
-
-export async function resendOtp(rawBody: unknown): Promise<{ ok: true }> {
-  const parsed = resendOtpBodySchema.safeParse(rawBody);
-  if (!parsed.success) {
-    throw new ValidationAppError(parsed.error);
-  }
-  return resendSignupVerificationEmail(parsed.data.email);
 }
 
 export async function resendEmailVerification(rawBody: unknown): Promise<{ ok: true }> {

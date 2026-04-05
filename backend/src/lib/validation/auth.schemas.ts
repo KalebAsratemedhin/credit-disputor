@@ -25,24 +25,10 @@ export const refreshBodySchema = z.object({
   refreshToken: z.string().min(1, "refreshToken is required"),
 });
 
-export const otpPurposeApiSchema = z.enum(["signup_verify"]);
-
-export const verifyOtpBodySchema = z.object({
-  email: z.string().email(),
-  code: z.string().regex(/^\d{4}$/, "code must be exactly 4 digits"),
-  purpose: otpPurposeApiSchema,
-});
-
 export const verifyEmailBodySchema = z.object({
   email: z.string().email(),
   code: z.string().regex(/^\d{4}$/, "code must be exactly 4 digits"),
 });
-
-export const resendOtpBodySchema = z
-  .object({
-    email: z.string().email(),
-    purpose: otpPurposeApiSchema,
-  });
 
 export const resendEmailVerificationBodySchema = z.object({
   email: z.string().email(),
@@ -96,4 +82,3 @@ export const signinMfaVerifyBodySchema = z.object({
 export type SigninBody = z.infer<typeof signinBodySchema>;
 export type SigninMfaVerifyBody = z.infer<typeof signinMfaVerifyBodySchema>;
 export type RefreshBody = z.infer<typeof refreshBodySchema>;
-export type OtpPurposeApi = z.infer<typeof otpPurposeApiSchema>;

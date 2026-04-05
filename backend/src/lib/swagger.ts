@@ -12,5 +12,15 @@ function loadOpenApiSpec(): Record<string, unknown> {
 
 export function setupSwagger(app: Express): void {
   const spec = loadOpenApiSpec();
-  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(spec));
+  app.use(
+    "/api-docs",
+    swaggerUi.serve,
+    swaggerUi.setup(spec, {
+      swaggerOptions: {
+        docExpansion: "list",
+        defaultModelExpandDepth: 4,
+        defaultModelsExpandDepth: 4,
+      },
+    })
+  );
 }

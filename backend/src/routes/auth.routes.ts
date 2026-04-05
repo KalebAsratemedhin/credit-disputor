@@ -54,8 +54,6 @@ router.post(
   resendOtpLimiter,
   authController.postResendEmailVerification
 );
-router.post("/verify-otp", verifyOtpLimiter, authController.postVerifyOtp);
-router.post("/resend-otp", resendOtpLimiter, authController.postResendOtp);
 router.post("/forgot-password", forgotPasswordLimiter, authController.postForgotPassword);
 router.post("/reset-password", resetPasswordLimiter, authController.postResetPassword);
 router.post("/refresh", authController.postRefresh);
