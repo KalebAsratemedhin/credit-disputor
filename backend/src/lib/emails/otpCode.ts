@@ -1,9 +1,6 @@
-export type OtpCodeEmailParams = {
-  code: string;
-  expiresInMinutes: number;
-  firstName: string;
-  purposeLabel: string;
-};
+import type { OtpCodeEmailParams } from "../types/email";
+
+export type { OtpCodeEmailParams };
 
 export function otpCodeEmailSubject(p: OtpCodeEmailParams): string {
   return `Your verification code — ${p.purposeLabel}`;

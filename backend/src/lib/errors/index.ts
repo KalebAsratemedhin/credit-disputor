@@ -1,10 +1,22 @@
 import type { ZodError } from "zod";
+import type { EmailDeliveryDetails } from "../types/email";
 import { AppError } from "../utils/errors";
 import { formatValidationMessage } from "../utils/validationMessage";
 
+export type { EmailDeliveryDetails };
+
+export * from "./bureau.errors";
+export * from "./experian.errors";
+
 export class ValidationAppError extends AppError {
   constructor(zodError: ZodError) {
-    super(formatValidationMessage(zodError), 400, "VALIDATION_ERROR", zodError.flatten());
+    super(
+      formatValidationMessage(zodError),
+      400,
+      "VALIDATION_ERROR",
+      zodError.flatten(),
+      true
+    );
   }
 }
 
@@ -67,11 +79,6 @@ export class EmailConfigurationError extends AppError {
     super("Email is not configured correctly on the server.", 500, "EMAIL_NOT_CONFIGURED");
   }
 }
-
-export type EmailDeliveryDetails = {
-  provider: "resend";
-  reason?: string;
-};
 
 export class EmailDeliveryError extends AppError {
   constructor(details?: EmailDeliveryDetails) {
@@ -163,6 +170,12 @@ export class InvalidAvatarTypeError extends AppError {
       400,
       "INVALID_AVATAR_TYPE"
     );
+  }
+}
+
+export class AvatarRequiredError extends AppError {
+  constructor() {
+    super("Avatar image file is required (field name: avatar).", 400, "AVATAR_REQUIRED");
   }
 }
 

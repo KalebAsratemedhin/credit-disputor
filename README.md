@@ -60,11 +60,11 @@ The server listens on `http://localhost:3000` (or the `PORT` you set).
 
 ### Email verification (one-time after signup)
 
-After **signup**, the API returns `{ user, verificationRequired: true }` and sends a **4-digit code** by email (or logs it when `EMAIL_PROVIDER=console`). Exchange the code for tokens with **`POST /auth/verify-email`** (`email`, `code`). This is **signup email verification only**—do not confuse it with sign-in MFA below. Legacy **`POST /auth/verify-otp`** (`email`, `code`, `purpose`: `signup_verify`) still works. Once verified, the user has `emailVerified: true`.
+After **signup**, the API returns `{ user, verificationRequired: true }` and sends a **4-digit code** by email (or logs it when `EMAIL_PROVIDER=console`). Exchange the code for tokens with **`POST /auth/verify-email`** (`email`, `code`). This is **signup email verification only**—do not confuse it with sign-in MFA below. Once verified, the user has `emailVerified: true`.
 
 **Password sign-in** then requires **MFA**: **`POST /auth/signin`** returns `{ mfaRequired, mfaToken, maskedEmail, mfaMethods }` (not session tokens), including `mfaMethods.webauthn` when the user has passkeys. With the same **`Authorization: Bearer <mfaToken>`** header you can: call **`POST /auth/signin/send-code`** to email a 4-digit sign-in OTP, then **`POST /auth/signin/mfa/verify`** with `{ kind: "email_otp" | "totp" | "backup_code", code }`; or, if `webauthn` is true, call **`POST /auth/signin/webauthn/authentication-options`** then **`POST /auth/signin/webauthn/authentication-verify`** with the browser WebAuthn assertion. **Google sign-in** (`POST /auth/google`) issues tokens in one step with no MFA.
 
-Use **`POST /auth/resend-email-verification`** (`email`) to resend the **signup** verification code. Legacy **`POST /auth/resend-otp`** is unchanged.
+Use **`POST /auth/resend-email-verification`** (`email`) to resend the **signup** verification code.
 
 ### Phone verification (Twilio Verify)
 
@@ -96,8 +96,6 @@ Email **templates** live under `backend/src/lib/emails/`; escaping, branded HTML
 | `POST` | `/auth/google` | GIS `idToken` → session tokens (no MFA) |
 | `POST` | `/auth/verify-email` | `{ email, code }` — verify email after signup |
 | `POST` | `/auth/resend-email-verification` | `{ email }` — resend signup verification code |
-| `POST` | `/auth/verify-otp` | Deprecated alias of verify-email (requires `purpose`) |
-| `POST` | `/auth/resend-otp` | Deprecated alias of resend-email-verification |
 | `POST` | `/auth/forgot-password` | Request reset email |
 | `POST` | `/auth/reset-password` | Set new password with token from email |
 | `POST` | `/auth/refresh` | Rotate refresh token |

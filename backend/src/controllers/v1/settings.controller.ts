@@ -1,8 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 import { env } from "../../config/env";
-import { ValidationAppError } from "../../lib/errors";
-import { AppError } from "../../lib/utils/errors";
+import { AvatarRequiredError, ValidationAppError } from "../../lib/errors";
 import { AVATAR_UPLOAD_SUBDIR } from "../../lib/constants";
 import { publicUploadPath } from "../../lib/upload/multerFactory";
 import * as settingsService from "../../services/settings.service";
@@ -44,11 +43,7 @@ export async function postMePassword(req: Request, res: Response, next: NextFunc
 export async function postMeAvatar(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     if (!req.file) {
-      throw new AppError(
-        "Avatar image file is required (field name: avatar).",
-        400,
-        "AVATAR_REQUIRED"
-      );
+      throw new AvatarRequiredError();
     }
 
     const relative = publicUploadPath(AVATAR_UPLOAD_SUBDIR, req.file.filename);

@@ -1,15 +1,8 @@
 import type { EmailOtpPurpose } from "@prisma/client";
+import type { EmailOtpChallengeRow } from "../lib/types/repositoryRows";
 import { prisma } from "../lib/prisma";
 
-export type EmailOtpChallengeRow = {
-  id: string;
-  userId: string;
-  purpose: EmailOtpPurpose;
-  codeHash: string;
-  expiresAt: Date;
-  attemptCount: number;
-  consumedAt: Date | null;
-};
+export type { EmailOtpChallengeRow };
 
 export async function invalidateActiveChallenges(userId: string, purpose: EmailOtpPurpose): Promise<void> {
   await prisma.emailOtpChallenge.updateMany({

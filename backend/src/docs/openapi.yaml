@@ -5,7 +5,7 @@ info:
   description: |
     Backend API with health checks, email/password sign-in (password then MFA via `mfaToken`: email OTP, TOTP, backup code, or WebAuthn passkey),
     optional Google sign-in (POST /auth/google, tokens without MFA), SMS phone verification via Twilio Verify,
-    and authenticated `/v1` APIs (profile, password, avatar, preferences, phone verify, TOTP, backup codes, WebAuthn).
+    and authenticated `/v1` APIs (profile, password, avatar, preferences, phone verify, bureau connection wizard, TOTP, backup codes, WebAuthn).
     `GET /auth/me` and `GET /v1/me` return the same user shape including `avatarUrl`.
 
 servers:
@@ -722,6 +722,297 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
 
+  /v1/bureau-connection/start:
+    post:
+      summary: Start bureau connection wizard (Bearer)
+      description: |
+        Creates a new connection in `awaitingIdentity`. Returns 409 if another non-terminal connection exists for the user.
+      tags: [BureauConnection]
+      security:
+        - bearerJwt: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BureauConnectionStartRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BureauConnectionStartResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          description: Active connection already in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/bureau-connection/{connectionId}/identity:
+    post:
+      summary: Submit identity (PII encrypted at rest) (Bearer)
+      tags: [BureauConnection]
+      security:
+        - bearerJwt: []
+      parameters:
+        - $ref: "#/components/parameters/BureauConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BureauConnectionIdentityRequest"
+      responses:
+        "200":
+          description: State advanced to awaitingAddress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BureauConnectionStateResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          description: Wrong step for current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/bureau-connection/{connectionId}/address:
+    post:
+      summary: Submit address (Bearer)
+      tags: [BureauConnection]
+      security:
+        - bearerJwt: []
+      parameters:
+        - $ref: "#/components/parameters/BureauConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BureauConnectionAddressRequest"
+      responses:
+        "200":
+          description: State advanced to awaitingConsent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BureauConnectionStateResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          description: Wrong step for current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/bureau-connection/{connectionId}/consent:
+    post:
+      summary: Record consent and start Experian Connect KIQ or report pull (Bearer)
+      tags: [BureauConnection]
+      security:
+        - bearerJwt: []
+      parameters:
+        - $ref: "#/components/parameters/BureauConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BureauConnectionConsentRequest"
+      responses:
+        "200":
+          description: State may be awaitingExperianKiq, processing, complete, or failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BureauConnectionStateResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          description: Wrong step for current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "502":
+          description: Experian Connect error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/bureau-connection/{connectionId}/experian/kiq-answers:
+    post:
+      summary: Submit Experian KIQ answers (Bearer)
+      tags: [BureauConnection]
+      security:
+        - bearerJwt: []
+      parameters:
+        - $ref: "#/components/parameters/BureauConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BureauConnectionKiqAnswersRequest"
+      responses:
+        "200":
+          description: State may be processing, complete, or failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BureauConnectionStateResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorBody"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          description: Wrong step for current state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
+  /v1/bureau-connection/{connectionId}/status:
+    get:
+      summary: Bureau connection status and per-bureau jobs (Bearer)
+      description: |
+        When state is `processing`, may trigger a debounced Experian report pull (same as after consent/KIQ).
+        `experianKiq.pidResult` is present only in `awaitingExperianKiq`.
+      tags: [BureauConnection]
+      security:
+        - bearerJwt: []
+      parameters:
+        - $ref: "#/components/parameters/BureauConnectionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BureauConnectionStatusResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: Connection not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+
   /v1/me/preferences:
     get:
       summary: Privacy and notification preferences (Bearer)
@@ -1178,6 +1469,15 @@ components:
         Use this scheme for `POST /auth/signin/send-code`, `POST /auth/signin/resend-code`, `POST /auth/signin/mfa/verify`,
         `POST /auth/signin/webauthn/authentication-options`, and `POST /auth/signin/webauthn/authentication-verify` only.
         Do not use `accessToken` here. In Swagger UI, click **Authorize**, choose this scheme, and paste **only** the JWT value (the UI adds the `Bearer ` prefix).
+
+  parameters:
+    BureauConnectionId:
+      name: connectionId
+      in: path
+      required: true
+      schema:
+        type: string
+        description: Bureau connection id (cuid)
 
   schemas:
     PublicUser:
@@ -1650,6 +1950,135 @@ components:
         Keys must be valid slugs from the catalog returned by `GET /v1/me/preferences` (unknown keys are rejected).
         Example: `{ "emailMarketing": false, "pushBrowserNotifications": true }`.
 
+    BureauConnectionStartRequest:
+      type: object
+      properties:
+        institutionId:
+          type: string
+          maxLength: 120
+
+    BureauConnectionStartResponse:
+      type: object
+      required: [connectionId, state]
+      properties:
+        connectionId:
+          type: string
+        state:
+          type: string
+          description: e.g. awaitingIdentity
+
+    BureauConnectionStateResponse:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+
+    BureauConnectionIdentityRequest:
+      type: object
+      required: [firstName, lastName, dob, ssn]
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        middleName:
+          type: string
+        dob:
+          type: string
+          description: MMDDYYYY (8 digits)
+        ssn:
+          type: string
+          description: 9–11 chars, digits and optional hyphen
+        email:
+          type: string
+          format: email
+
+    BureauConnectionAddressRequest:
+      type: object
+      required: [street, city, state, zip, addressOverTwoYears]
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+          description: Two-letter US/state code
+        zip:
+          type: string
+        addressOverTwoYears:
+          type: boolean
+        previousStreet:
+          type: string
+        previousCity:
+          type: string
+        previousState:
+          type: string
+        previousZip:
+          type: string
+
+    BureauConnectionConsentRequest:
+      type: object
+      required: [agreementVersion]
+      properties:
+        agreementVersion:
+          type: string
+        textHash:
+          type: string
+
+    BureauConnectionKiqAnswersRequest:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+          minItems: 1
+
+    BureauBureauStatusItem:
+      type: object
+      required: [bureau, status]
+      properties:
+        bureau:
+          type: string
+          example: experian
+        status:
+          type: string
+          example: complete
+        score:
+          type: integer
+        scoreType:
+          type: string
+        errorCode:
+          type: string
+          nullable: true
+
+    BureauConnectionStatusResponse:
+      type: object
+      required: [connectionId, state, bureaus]
+      properties:
+        connectionId:
+          type: string
+        state:
+          type: string
+        userSafeFailureCode:
+          type: string
+          nullable: true
+        bureaus:
+          type: array
+          items:
+            $ref: "#/components/schemas/BureauBureauStatusItem"
+        experianKiq:
+          type: object
+          nullable: true
+          properties:
+            pidResult:
+              description: Experian KIQ payload for UI (when awaitingExperianKiq)
+              nullable: true
+
     WebauthnRegistrationOptions:
       type: object
       description: PublicKeyCredentialCreationOptionsJSON shape from @simplewebauthn/server generateRegistrationOptions
@@ -1687,3 +2116,5 @@ tags:
     description: Authenticated profile, password, avatar, and preferences (`/v1/me`, `/v1/me/preferences`)
   - name: Security
     description: TOTP, backup codes, and WebAuthn passkeys (`/v1/security`)
+  - name: BureauConnection
+    description: Experian-first bureau connection wizard (`/v1/bureau-connection`)

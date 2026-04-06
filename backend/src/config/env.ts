@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { bool, cleanEnv, port, str } from "envalid";
+import { bool, cleanEnv, num, port, str } from "envalid";
 
 const raw = cleanEnv(process.env, {
   NODE_ENV: str({
@@ -51,6 +51,9 @@ const raw = cleanEnv(process.env, {
   TOTP_ENCRYPTION_KEY: str({
     desc: "64 hex chars (32 bytes) for AES-256-GCM encryption of TOTP secrets at rest",
   }),
+  PII_ENCRYPTION_KEY: str({
+    desc: "64 hex chars (32 bytes) for AES-256-GCM encryption of bureau PII blobs at rest",
+  }),
   WEBAUTHN_RP_ID: str({
     default: "localhost",
     desc: "WebAuthn relying party ID (hostname only, e.g. localhost or app.example.com)",
@@ -72,6 +75,36 @@ const raw = cleanEnv(process.env, {
     default: "US",
     desc: "Default country for parsing national phone numbers at signup/profile",
   }),
+  EXPERIAN_MOCK: bool({
+    default: false,
+    desc: "If true, skip real Experian HTTP; use fixed mock scores/tokens in experianConnect.service",
+  }),
+  EXPERIAN_CLIENT_ID: str({ default: "" }),
+  EXPERIAN_CLIENT_SECRET: str({ default: "" }),
+  EXPERIAN_USERNAME: str({ default: "" }),
+  EXPERIAN_PASSWORD: str({ default: "" }),
+  EXPERIAN_TOKEN_URL: str({
+    default: "https://sandbox-us-api.experian.com/oauth2/v1/token",
+    desc: "OAuth2 token endpoint (sandbox or production US)",
+  }),
+  EXPERIAN_CONNECT_BASE_URL: str({
+    default: "https://sandbox-us-api.experian.com/connectapi",
+    desc: "Connect API base including /connectapi path",
+  }),
+  EXPERIAN_CONNECT_PRODUCT_ID: str({
+    default: "38",
+    desc: "Connect /v3/report productId (see Experian Connect swagger enum)",
+  }),
+  EXPERIAN_CONNECT_PURPOSE_TYPE: str({
+    default: "7",
+    desc: "FCRA purposeType string per Connect API (e.g. 7 = evaluating financial status)",
+  }),
+  EXPERIAN_CONNECT_RISK_MODEL: str({
+    choices: ["VP", "VQ"],
+    default: "VP",
+    desc: "VP = Vantage 3, VQ = Vantage 4",
+  }),
+  EXPERIAN_HTTP_TIMEOUT_MS: num({ default: 30_000 }),
 });
 
 const publicApiBase =
@@ -108,6 +141,7 @@ export const env = {
   passwordResetTtlMs: raw.PASSWORD_RESET_TTL_MS,
   googleClientIds,
   totpEncryptionKeyHex: raw.TOTP_ENCRYPTION_KEY,
+  piiEncryptionKeyHex: raw.PII_ENCRYPTION_KEY,
   webauthnRpId: raw.WEBAUTHN_RP_ID,
   webauthnRpName: raw.WEBAUTHN_RP_NAME,
   webauthnOrigins: webAuthnOrigins,
@@ -116,4 +150,15 @@ export const env = {
   twilioAuthToken: raw.TWILIO_AUTH_TOKEN,
   twilioVerifyServiceSid: raw.TWILIO_VERIFY_SERVICE_SID,
   twilioPhoneDefaultRegion: raw.TWILIO_PHONE_DEFAULT_REGION,
+  experianMock: raw.EXPERIAN_MOCK,
+  experianClientId: raw.EXPERIAN_CLIENT_ID,
+  experianClientSecret: raw.EXPERIAN_CLIENT_SECRET,
+  experianUsername: raw.EXPERIAN_USERNAME,
+  experianPassword: raw.EXPERIAN_PASSWORD,
+  experianTokenUrl: raw.EXPERIAN_TOKEN_URL,
+  experianConnectBaseUrl: raw.EXPERIAN_CONNECT_BASE_URL,
+  experianConnectProductId: raw.EXPERIAN_CONNECT_PRODUCT_ID,
+  experianConnectPurposeType: raw.EXPERIAN_CONNECT_PURPOSE_TYPE,
+  experianConnectRiskModel: raw.EXPERIAN_CONNECT_RISK_MODEL as "VP" | "VQ",
+  experianHttpTimeoutMs: raw.EXPERIAN_HTTP_TIMEOUT_MS,
 };

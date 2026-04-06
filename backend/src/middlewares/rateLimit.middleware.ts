@@ -104,3 +104,11 @@ export const resetPasswordLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Too many attempts. Try again later.", code: "RATE_LIMITED" },
 });
+
+export const bureauConnectionPiiLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS.FIFTEEN_MINUTES,
+  max: RATE_LIMIT_MAX_REQUESTS.BUREAU_CONNECTION_PII,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many bureau connection requests. Try again later.", code: "RATE_LIMITED" },
+});

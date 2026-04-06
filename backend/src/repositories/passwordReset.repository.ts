@@ -1,12 +1,7 @@
+import type { PasswordResetRow } from "../lib/types/repositoryRows";
 import { prisma } from "../lib/prisma";
 
-export type PasswordResetRow = {
-  id: string;
-  userId: string;
-  tokenHash: string;
-  expiresAt: Date;
-  usedAt: Date | null;
-};
+export type { PasswordResetRow };
 
 export async function deleteResetTokensForUser(userId: string): Promise<void> {
   await prisma.passwordResetToken.deleteMany({ where: { userId } });

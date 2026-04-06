@@ -1,11 +1,7 @@
+import type { RefreshTokenRow } from "../lib/types/repositoryRows";
 import { prisma } from "../lib/prisma";
 
-export type RefreshTokenRow = {
-  id: string;
-  userId: string;
-  tokenHash: string;
-  expiresAt: Date;
-};
+export type { RefreshTokenRow };
 
 export async function createRefreshToken(data: {
   userId: string;

@@ -44,6 +44,13 @@ import {
   verifyEmailBodySchema,
   verifyPhoneCodeOnlyBodySchema,
 } from "../lib/validation/auth.schemas";
+import type {
+  AuthResponse,
+  MfaMethods,
+  SigninMfaRequiredResponse,
+  SigninResult,
+  SignupPendingResponse,
+} from "../lib/types/auth";
 import type { PublicUser } from "../lib/types/user";
 import { sendPasswordResetEmail } from "./email/email.service";
 import {
@@ -67,33 +74,6 @@ function isPrismaUniqueViolation(e: unknown): boolean {
     (e as { code: string }).code === "P2002"
   );
 }
-
-export type AuthResponse = {
-  user: PublicUser;
-  accessToken: string;
-  refreshToken: string;
-};
-
-export type SignupPendingResponse = {
-  user: PublicUser;
-  verificationRequired: true;
-};
-
-export type MfaMethods = {
-  emailOtp: true;
-  totp: boolean;
-  backupCode: boolean;
-  webauthn: boolean;
-};
-
-export type SigninMfaRequiredResponse = {
-  mfaRequired: true;
-  mfaToken: string;
-  maskedEmail: string;
-  mfaMethods: MfaMethods;
-};
-
-export type SigninResult = AuthResponse | SigninMfaRequiredResponse;
 
 async function buildMfaMethods(userId: string): Promise<MfaMethods> {
   const totp = await totpRepository.findUserTotpByUserId(userId);

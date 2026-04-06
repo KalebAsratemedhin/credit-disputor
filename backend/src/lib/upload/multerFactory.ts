@@ -1,22 +1,11 @@
 import fs from "fs";
 import path from "path";
-import type { Express, Request } from "express";
+import type { Request } from "express";
 import multer from "multer";
 import { PUBLIC_UPLOAD_ROOT } from "../constants";
+import type { FileUploadOptions } from "../types/upload";
 
-export type FileUploadFilenameContext = {
-  userId: string;
-  originalname: string;
-};
-
-export type FileUploadOptions = {
-  subdir: string;
-  maxBytes: number;
-  allowedMimeTypes: RegExp;
-  filename: (ctx: FileUploadFilenameContext) => string;
-  /** If set, rejected MIME types invoke this and Multer passes the error to `next` (handler not run). */
-  invalidMimeTypeError?: (file: Express.Multer.File) => Error;
-};
+export type { FileUploadFilenameContext, FileUploadOptions } from "../types/upload";
 
 function normalizeClientMimeType(mimetype: string): string {
   return mimetype === "image/jpg" ? "image/jpeg" : mimetype;

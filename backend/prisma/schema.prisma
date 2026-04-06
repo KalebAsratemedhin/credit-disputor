@@ -17,6 +17,30 @@ enum WebAuthnChallengeKind {
   AUTHENTICATION
 }
 
+enum BureauConnectionState {
+  AWAITING_IDENTITY
+  AWAITING_ADDRESS
+  AWAITING_CONSENT
+  AWAITING_EXPERIAN_KIQ
+  PROCESSING
+  COMPLETE
+  FAILED
+}
+
+enum BureauCode {
+  EXPERIAN
+  TRANSUNION
+  EQUIFAX
+}
+
+enum BureauPullJobStatus {
+  PENDING
+  PENDING_PROVIDER
+  IN_FLIGHT
+  COMPLETE
+  FAILED
+}
+
 model User {
   id                   String                @id @default(cuid())
   email                String                @unique
@@ -36,7 +60,9 @@ model User {
   backupCodes          UserBackupCode[]
   webauthnCredentials  WebAuthnCredential[]
   webauthnChallenges   WebAuthnChallenge[]
-  preferences UserPreference[]
+  preferences          UserPreference[]
+  bureauConnections    BureauConnection[]
+  scoreSnapshots       ScoreSnapshot[]
 }
 
 model UserPreference {
@@ -135,4 +161,66 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+model BureauConnection {
+  id                       String                @id @default(cuid())
+  userId                   String
+  user                     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  state                    BureauConnectionState @default(AWAITING_IDENTITY)
+  institutionId            String?
+  identityPayloadEnc       String?
+  addressPayloadEnc        String?
+  experianAuthSessionEnc   String?
+  experianConsumerTokenEnc String?
+  experianKiqPayloadEnc    String?
+  lastProviderPollAt       DateTime?
+  userSafeFailureCode      String?
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  consent                  BureauConsentRecord?
+  pullJobs                 BureauPullJob[]
+
+  @@index([userId])
+  @@index([userId, state])
+}
+
+model BureauConsentRecord {
+  id               String           @id @default(cuid())
+  connectionId     String           @unique
+  connection       BureauConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  userId           String
+  agreementVersion String
+  textHash         String?
+  agreedAt         DateTime
+
+  @@index([userId])
+}
+
+model BureauPullJob {
+  id           String              @id @default(cuid())
+  connectionId String
+  connection   BureauConnection    @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  bureau       BureauCode
+  status       BureauPullJobStatus @default(PENDING)
+  providerRef  String?
+  errorCode    String?
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([connectionId, bureau])
+  @@index([connectionId])
+}
+
+model ScoreSnapshot {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connectionId String
+  bureau       BureauCode
+  score        Int
+  scoreType    String
+  capturedAt   DateTime   @default(now())
+
+  @@index([userId, bureau, capturedAt])
+  @@index([connectionId])
 }

@@ -1,22 +1,23 @@
 import {
   OTP_CODE_EMAIL_HTML_TEMPLATE,
-  type OtpCodeEmailParams,
   otpCodeEmailSubject,
   otpCodeEmailTextLines,
 } from "../../lib/emails/otpCode";
 import {
   PASSWORD_RESET_EMAIL_HTML_TEMPLATE,
-  type PasswordResetEmailParams,
   passwordResetEmailSubject,
   passwordResetEmailTextLines,
 } from "../../lib/emails/passwordReset";
 import { env } from "../../config/env";
 import { EMAIL_PRIMARY_COLOR } from "../../lib/constants";
+import type {
+  OtpCodeEmailParams,
+  PasswordResetEmailParams,
+  RenderedEmail,
+} from "../../lib/types/email";
 import { getEmailSender } from "./getEmailSender";
-import type { RenderedEmail } from "./types";
 
-export type { OtpCodeEmailParams } from "../../lib/emails/otpCode";
-export type { PasswordResetEmailParams } from "../../lib/emails/passwordReset";
+export type { OtpCodeEmailParams, PasswordResetEmailParams } from "../../lib/types/email";
 
 function escapeHtml(s: string): string {
   return s

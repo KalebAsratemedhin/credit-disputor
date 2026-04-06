@@ -1,9 +1,3 @@
-import type { RenderedEmail } from "./types";
+import type { EmailSender, SendTransactionalParams } from "../../lib/types/email";
 
-export type SendTransactionalParams = RenderedEmail & {
-  to: string;
-};
-
-export interface EmailSender {
-  sendTransactional(params: SendTransactionalParams): Promise<void>;
-}
+export type { EmailSender, SendTransactionalParams };

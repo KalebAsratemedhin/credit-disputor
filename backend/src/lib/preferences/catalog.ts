@@ -1,16 +1,6 @@
-export type CatalogPreferenceGroup =
-  | "PRIVACY"
-  | "EMAIL_NOTIFICATION"
-  | "PUSH_NOTIFICATION";
+import type { CatalogPreferenceGroup, PreferenceCatalogEntry } from "../types/preferences";
 
-export type PreferenceCatalogEntry = {
-  key: string;
-  title: string;
-  description: string;
-  group: CatalogPreferenceGroup;
-  sortOrder: number;
-  defaultValue: boolean;
-};
+export type { CatalogPreferenceGroup, PreferenceCatalogEntry };
 
 /** Application-owned catalog (titles, defaults, grouping). Keys are whitelisted for PATCH. */
 export const PREFERENCE_CATALOG: readonly PreferenceCatalogEntry[] = [

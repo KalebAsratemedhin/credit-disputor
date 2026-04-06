@@ -1,5 +1,5 @@
 import type { AuthenticationResponseJSON, AuthenticatorTransportFuture } from "@simplewebauthn/server";
-import type { AuthResponse } from "./auth.service";
+import type { AuthResponse } from "../lib/types/auth";
 import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,

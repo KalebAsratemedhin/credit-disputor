@@ -17,7 +17,10 @@ export function errorMiddleware(
       message: err.message,
       code: err.code,
     };
-    if (err.details !== undefined) {
+    const exposeDetails =
+      err.details !== undefined &&
+      (env.isDevelopment || err.exposeDetailsToClient === true);
+    if (exposeDetails) {
       body.details = err.details;
     }
     res.status(err.statusCode).json(body);

@@ -1,8 +1,6 @@
-export type PasswordResetEmailParams = {
-  firstName: string;
-  resetUrl: string;
-  expiresInMinutes: number;
-};
+import type { PasswordResetEmailParams } from "../types/email";
+
+export type { PasswordResetEmailParams };
 
 export function passwordResetEmailSubject(): string {
   return "Reset your password";

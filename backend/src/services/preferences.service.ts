@@ -5,15 +5,9 @@ import {
   groupApiSegment,
   listCatalogEntries,
 } from "../lib/preferences/catalog";
+import type { PreferenceItemResponse } from "../lib/types/preferences";
 import { patchPreferencesBodySchema } from "../lib/validation/preferences.schemas";
 import * as preferencesRepository from "../repositories/preferences.repository";
-
-export type PreferenceItemResponse = {
-  key: string;
-  title: string;
-  description: string;
-  value: boolean;
-};
 
 async function resolveUpdatedAt(userId: string): Promise<string> {
   const userMax = await preferencesRepository.maxUserPreferenceUpdatedAt(userId);
